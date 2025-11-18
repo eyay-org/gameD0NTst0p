@@ -1,3 +1,4 @@
 python-dotenv==1.2.1
 igdb-api-v4==0.3.3
 mysql-connector-python==9.5.0
+faker==38.0.0
