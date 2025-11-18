@@ -1,0 +1,12 @@
+# Python'a özel dosyalar
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Sanal ortam klasörü (varsa)
+venv/
+env/
+
+# HASSAS BİLGİLER
+.env
