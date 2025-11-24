@@ -47,6 +47,11 @@
   transform: scale(1.05);
 }
 
+.gallery-image.active {
+  border-color: #4ae24a;
+  box-shadow: 0 0 10px rgba(74, 226, 74, 0.5);
+}
+
 .product-info-section {
   display: flex;
   flex-direction: column;

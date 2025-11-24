@@ -11,6 +11,7 @@ const ProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [activeImage, setActiveImage] = useState(null);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -28,6 +29,13 @@ const ProductDetail = () => {
 
     loadProduct();
   }, [productId, navigate]);
+
+  useEffect(() => {
+    if (product) {
+      const initialImage = product.main_image || product.media?.[0]?.media_url || '/placeholder-game.png';
+      setActiveImage(initialImage);
+    }
+  }, [product]);
 
   const handleAddToCart = async () => {
     if (!user) {
@@ -52,7 +60,6 @@ const ProductDetail = () => {
     return null;
   }
 
-  const mainImage = product.main_image || product.media?.[0]?.media_url || '/placeholder-game.png';
   const price = parseFloat(product.price).toFixed(2);
 
   return (
@@ -60,8 +67,8 @@ const ProductDetail = () => {
       <div className="container">
         <div className="product-detail-content">
           <div className="product-images">
-            <img 
-              src={mainImage} 
+            <img
+              src={activeImage}
               alt={product.product_name}
               className="main-product-image"
               onError={(e) => {
@@ -70,12 +77,13 @@ const ProductDetail = () => {
             />
             {product.media && product.media.length > 1 && (
               <div className="product-gallery">
-                {product.media.slice(1, 5).map((media, idx) => (
-                  <img 
+                {product.media.map((media, idx) => (
+                  <img
                     key={idx}
-                    src={media.media_url} 
-                    alt={`${product.product_name} ${idx + 2}`}
-                    className="gallery-image"
+                    src={media.media_url}
+                    alt={`${product.product_name} ${idx + 1}`}
+                    className={`gallery-image ${activeImage === media.media_url ? 'active' : ''}`}
+                    onClick={() => setActiveImage(media.media_url)}
                   />
                 ))}
               </div>
@@ -84,7 +92,7 @@ const ProductDetail = () => {
 
           <div className="product-info-section">
             <h1 className="product-title">{product.product_name}</h1>
-            
+
             <div className="product-price-large">${price}</div>
 
             {product.product_type === 'game' && (
@@ -175,7 +183,7 @@ const ProductDetail = () => {
                   onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                 />
               </div>
-              <button 
+              <button
                 className="pixel-button success add-cart-large"
                 onClick={handleAddToCart}
               >

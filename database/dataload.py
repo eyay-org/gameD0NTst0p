@@ -119,10 +119,12 @@ def load_games(cnx, cursor, igdb_genre_map):
     # --- DİL TİPİ MAP (Sayıları Metne Çevirmek için) ---
     LANG_SUPPORT_TYPE = {1: "audio", 2: "subtitles", 3: "interface"}
 
-    random_offset = random.randint(0, 1000)
-    print(f"Oyunlar için rastgele 'offset' değeri {random_offset} olarak ayarlandı.")
+    # --- KAPSAMLI API SORGUSU - Popüler oyunları çekiyoruz ---
+    # --- KAPSAMLI API SORGUSU - Popüler oyunları çekiyoruz ---
+    # Rastgelelik eklemek için offset kullanıyoruz (İlk 200 popüler oyun arasından 50 tane seçer)
+    random_offset = random.randint(0, 150)
+    print(f"Popüler oyunlar için rastgele 'offset' değeri {random_offset} olarak ayarlandı.")
 
-    # --- KAPSAMLI API SORGUSU - Tüm mevcut alanları çekiyoruz ---
     api_sorgusu = (
         "fields name, summary, storyline, first_release_date, "
         "platforms.name, platforms.id, "
@@ -136,7 +138,8 @@ def load_games(cnx, cursor, igdb_genre_map):
         "videos.video_id, videos.name, "
         "aggregated_rating, total_rating, rating_count, "
         "websites.url, websites.category; "
-        "where platforms = (48, 49, 130, 6) & first_release_date != null & summary != null; "
+        "where platforms = (48, 49, 130, 6) & first_release_date != null & summary != null & rating_count > 100; "
+        "sort rating_count desc; "
         f"limit 50; offset {random_offset};"
     )
 
@@ -360,8 +363,8 @@ def load_product_media(cnx, cursor, games_with_media):
                     # Convert IGDB image URL format
                     if cover_url.startswith("//"):
                         cover_url = "https:" + cover_url
-                        # Upgrade thumbnail size to better quality
-                        cover_url = cover_url.replace("/t_thumb/", "/t_cover_big/")
+                        # Upgrade thumbnail size to better quality (720p for covers)
+                        cover_url = cover_url.replace("/t_thumb/", "/t_720p/")
                     elif not cover_url.startswith("http"):
                         image_id = cover.get("image_id", "")
                         if image_id:
@@ -380,14 +383,14 @@ def load_product_media(cnx, cursor, games_with_media):
                 if screenshot_url:
                     if screenshot_url.startswith("//"):
                         screenshot_url = "https:" + screenshot_url
-                        # Upgrade thumbnail size to better quality
+                        # Upgrade thumbnail size to better quality (1080p for screenshots)
                         screenshot_url = screenshot_url.replace(
-                            "/t_thumb/", "/t_screenshot_big/"
+                            "/t_thumb/", "/t_1080p/"
                         )
                     elif not screenshot_url.startswith("http"):
                         image_id = screenshot.get("image_id", "")
                         if image_id:
-                            screenshot_url = f"https://images.igdb.com/igdb/image/upload/t_screenshot_big/{image_id}.jpg"
+                            screenshot_url = f"https://images.igdb.com/igdb/image/upload/t_1080p/{image_id}.jpg"
 
                     cursor.execute(
                         query_media,
@@ -423,7 +426,22 @@ def load_consoles(cnx, cursor):
     """3. Aşama: Konsolları (PRODUCT ve CONSOLE) yükler."""
     print("3. Aşama: Konsollar IGDB'den çekiliyor...")
 
-    console_ids = "(48, 49, 130, 167, 169)"
+    # Added: PS3 (9), Xbox 360 (12), Wii (5), Wii U (41), 3DS (37)
+    console_ids = "(48, 49, 130, 167, 169, 9, 12, 5, 41, 37)"
+
+    # Manual map for high-quality console images (Wikimedia Commons)
+    CONSOLE_IMAGE_MAP = {
+        48: "https://upload.wikimedia.org/wikipedia/commons/7/7e/PS4-Console-wDS4.jpg",  # PS4
+        49: "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",  # Xbox One
+        130: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",  # Switch
+        167: "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",  # PS5
+        169: "https://upload.wikimedia.org/wikipedia/commons/5/54/Xbox_Series_X_Console.png",  # Xbox Series X
+        9: "https://upload.wikimedia.org/wikipedia/commons/d/d3/Sony-PlayStation-3-2001A-wController-L.jpg", # PS3
+        12: "https://upload.wikimedia.org/wikipedia/commons/0/03/Xbox-360-S-Console-Set.png", # Xbox 360
+        5: "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png", # Wii
+        41: "https://upload.wikimedia.org/wikipedia/commons/4/44/Wii_U_Console_and_Gamepad.png", # Wii U
+        37: "https://upload.wikimedia.org/wikipedia/commons/0/00/Nintendo-3DS-AquaBlue.png", # 3DS
+    }
 
     # Fetch comprehensive platform data
     api_sorgusu = (
@@ -525,23 +543,36 @@ def load_consoles(cnx, cursor):
                 ),
             )
 
-            # --- 4. Add platform logo as media ---
+            # --- 4. Add platform logo as media (Main Image) ---
             platform_logo = console.get("platform_logo")
+            logo_url = None
+            
             if platform_logo:
                 logo_url = platform_logo.get("url", "")
                 if logo_url:
                     if logo_url.startswith("//"):
                         logo_url = "https:" + logo_url
                         # Upgrade thumbnail size to better quality
-                        logo_url = logo_url.replace("/t_thumb/", "/t_logo_med/")
+                        logo_url = logo_url.replace("/t_thumb/", "/t_720p/")
                     elif not logo_url.startswith("http"):
                         image_id = platform_logo.get("image_id", "")
                         if image_id:
-                            logo_url = f"https://images.igdb.com/igdb/image/upload/t_logo_med/{image_id}.png"
+                            logo_url = f"https://images.igdb.com/igdb/image/upload/t_720p/{image_id}.png"
 
-                    cursor.execute(
-                        query_media, (yeni_product_id, "photo", logo_url, 0, True)
-                    )
+            if logo_url:
+                cursor.execute(
+                    query_media, (yeni_product_id, "photo", logo_url, 0, True)
+                )
+            
+            # --- 5. Add hardware image as secondary media ---
+            console_id = console.get("id")
+            hardware_url = CONSOLE_IMAGE_MAP.get(console_id)
+
+            if hardware_url:
+                # Use manual high-res image as secondary image
+                cursor.execute(
+                    query_media, (yeni_product_id, "photo", hardware_url, 1, False)
+                )
 
             cnx.commit()
             print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")
