@@ -11,7 +11,7 @@ const ProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -30,12 +30,23 @@ const ProductDetail = () => {
     loadProduct();
   }, [productId, navigate]);
 
+  // Keyboard navigation for lightbox
   useEffect(() => {
-    if (product) {
-      const initialImage = product.main_image || product.media?.[0]?.media_url || '/placeholder-game.png';
-      setActiveImage(initialImage);
-    }
-  }, [product]);
+    const handleKeyDown = (e) => {
+      if (lightboxIndex === null) return;
+
+      if (e.key === 'Escape') {
+        setLightboxIndex(null);
+      } else if (e.key === 'ArrowRight') {
+        setLightboxIndex((prev) => (prev + 1) % product.media.length);
+      } else if (e.key === 'ArrowLeft') {
+        setLightboxIndex((prev) => (prev - 1 + product.media.length) % product.media.length);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxIndex, product]);
 
   const handleAddToCart = async () => {
     if (!user) {
@@ -62,30 +73,86 @@ const ProductDetail = () => {
 
   const price = parseFloat(product.price).toFixed(2);
 
+  const openLightbox = (index) => {
+    setLightboxIndex(index);
+  };
+
+  const closeLightbox = () => {
+    setLightboxIndex(null);
+  };
+
+  const nextImage = (e) => {
+    e.stopPropagation();
+    setLightboxIndex((prev) => (prev + 1) % product.media.length);
+  };
+
+  const prevImage = (e) => {
+    e.stopPropagation();
+    setLightboxIndex((prev) => (prev - 1 + product.media.length) % product.media.length);
+  };
+
   return (
     <div className="product-detail-page">
+      {lightboxIndex !== null && product.media && (
+        <div className="lightbox-overlay" onClick={closeLightbox}>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button className="lightbox-nav-btn prev" onClick={prevImage}>&#10094;</button>
+
+            {product.media[lightboxIndex].media_type === 'video' ? (
+              <div className="lightbox-video-placeholder">VIDEO NOT SUPPORTED IN LIGHTBOX</div>
+            ) : (
+              <img
+                src={product.media[lightboxIndex].media_url}
+                alt="Fullscreen view"
+                className="lightbox-image"
+              />
+            )}
+
+            <button className="lightbox-nav-btn next" onClick={nextImage}>&#10095;</button>
+            <button className="lightbox-close" onClick={closeLightbox}>×</button>
+
+            <div className="lightbox-counter">
+              {lightboxIndex + 1} / {product.media.length}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="container">
         <div className="product-detail-content">
           <div className="product-images">
-            <img
-              src={activeImage}
-              alt={product.product_name}
-              className="main-product-image"
-              onError={(e) => {
-                e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%234a90e2" width="400" height="400"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="white" font-family="monospace" font-size="40"%3E🎮%3C/text%3E%3C/svg%3E';
-              }}
-            />
-            {product.media && product.media.length > 1 && (
-              <div className="product-gallery">
-                {product.media.map((media, idx) => (
-                  <img
-                    key={idx}
-                    src={media.media_url}
-                    alt={`${product.product_name} ${idx + 1}`}
-                    className={`gallery-image ${activeImage === media.media_url ? 'active' : ''}`}
-                    onClick={() => setActiveImage(media.media_url)}
-                  />
-                ))}
+            {/* Main Cover Section */}
+            <div className={`main-image-wrapper type-${product.product_type}`}>
+              <img
+                src={product.main_image || product.media?.[0]?.media_url || '/placeholder-game.png'}
+                alt={product.product_name}
+                className="main-product-image"
+                onError={(e) => {
+                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%234a90e2" width="400" height="400"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="white" font-family="monospace" font-size="40"%3E🎮%3C/text%3E%3C/svg%3E';
+                }}
+              />
+            </div>
+
+            {/* Screenshots Gallery Section */}
+            {product.media && product.media.length > 0 && (
+              <div className="screenshots-section">
+                <h3 className="section-title">SCREENSHOTS & MEDIA</h3>
+                <div className="product-gallery">
+                  {product.media.map((media, idx) => (
+                    <div key={idx} className="gallery-item">
+                      {media.media_type === 'video' ? (
+                        <div className="video-placeholder">VIDEO</div>
+                      ) : (
+                        <img
+                          src={media.media_url}
+                          alt={`${product.product_name} screenshot ${idx + 1}`}
+                          className="gallery-image"
+                          onClick={() => openLightbox(idx)}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
