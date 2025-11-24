@@ -24,18 +24,46 @@
 .product-image-container {
   position: relative;
   width: 100%;
-  height: 250px;
   overflow: hidden;
-  background: #1a1a2e;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Default/Console height */
+.product-image-container.type-console {
+  height: 220px;
+  background: #ffffff;
+  border-bottom: 4px solid #4a90e2;
+}
+
+/* Game height - fixed aspect ratio 3:4 (540x720) */
+.product-image-container.type-game {
+  width: 100%;
+  aspect-ratio: 3/4;
+  background: #000;
 }
 
 .product-image {
   width: 100%;
   height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.type-game .product-image {
   object-fit: cover;
+  padding: 0;
   image-rendering: pixelated;
-  image-rendering: -moz-crisp-edges;
-  image-rendering: crisp-edges;
+  /* Keep pixelated for pixel art games if desired, or remove if covers are high res */
+}
+
+.type-console .product-image {
+  object-fit: contain;
+  padding: 15px;
+  filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.5));
+  image-rendering: auto;
+  /* Smooth rendering for photos */
 }
 
 .product-badge {
@@ -110,18 +138,22 @@
   .product-image-container {
     height: 200px;
   }
-  
+
+  .product-image-container.type-game {
+    height: auto;
+    aspect-ratio: 3/4;
+  }
+
   .product-name {
     font-size: 10px;
   }
-  
+
   .product-footer {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .add-cart-btn {
     width: 100%;
   }
 }
-

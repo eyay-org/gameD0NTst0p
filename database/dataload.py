@@ -421,34 +421,103 @@ def load_product_media(cnx, cursor, games_with_media):
 
     print(f"2b. Aşama (Medya) tamamlandı. Toplam {media_count} medya eklendi.\n")
 
+#  CONSOLE_IMAGE_MAP = {
+#         # PlayStation 4 (Wiki Commons)
+#         48: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Sony-PlayStation-4-PS4-Console-FL.png",
+        
+#         # Xbox One (Wiki Commons)
+#         49: "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",
+        
+#         # Nintendo Switch (Wiki Commons)
+#         130: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",
+        
+#         # PlayStation 5 (Wiki Commons)
+#         167: "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",
+        
+#         # Xbox Series X (Wiki Commons)
+#         169: "https://upload.wikimedia.org/wikipedia/commons/2/25/Xbox_Series_X_2_%28transparent_background%29.png",
+        
+#         # PlayStation 3 (Wiki Commons - Slim Model)
+#         9: "https://upload.wikimedia.org/wikipedia/commons/d/d3/PS3Versions.png",
+        
+#         # Xbox 360 (Wiki Commons - S Model)
+#         12: "https://upload.wikimedia.org/wikipedia/commons/6/69/Xbox360.png",
+        
+#         # Wii (Wiki Commons)
+#         5: "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png",
+        
+#         # Wii U (Wiki Commons - Kırık link düzeltildi)
+#         41: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Wii_U_Console_and_Gamepad.png/800px-Wii_U_Console_and_Gamepad.png",
+        
+#         # Nintendo 3DS (Wiki Commons - Kırık link düzeltildi)
+#         37: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Nintendo-3DS-AquaOpen.png/800px-Nintendo-3DS-AquaOpen.png",
+#     }
 
 def load_consoles(cnx, cursor):
     """3. Aşama: Konsolları (PRODUCT ve CONSOLE) yükler."""
     print("3. Aşama: Konsollar IGDB'den çekiliyor...")
 
-    # Added: PS3 (9), Xbox 360 (12), Wii (5), Wii U (41), 3DS (37)
+    # Seçtiğimiz Konsol ID'leri
     console_ids = "(48, 49, 130, 167, 169, 9, 12, 5, 41, 37)"
 
-    # Manual map for high-quality console images (Wikimedia Commons)
-    CONSOLE_IMAGE_MAP = {
-        48: "https://upload.wikimedia.org/wikipedia/commons/7/7e/PS4-Console-wDS4.jpg",  # PS4
-        49: "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",  # Xbox One
-        130: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",  # Switch
-        167: "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",  # PS5
-        169: "https://upload.wikimedia.org/wikipedia/commons/5/54/Xbox_Series_X_Console.png",  # Xbox Series X
-        9: "https://upload.wikimedia.org/wikipedia/commons/d/d3/Sony-PlayStation-3-2001A-wController-L.jpg", # PS3
-        12: "https://upload.wikimedia.org/wikipedia/commons/0/03/Xbox-360-S-Console-Set.png", # Xbox 360
-        5: "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png", # Wii
-        41: "https://upload.wikimedia.org/wikipedia/commons/4/44/Wii_U_Console_and_Gamepad.png", # Wii U
-        37: "https://upload.wikimedia.org/wikipedia/commons/0/00/Nintendo-3DS-AquaBlue.png", # 3DS
+    # GÜNCELLENMİŞ HARİTA: Hem Donanım Hem Logo İçeriyor (Wikimedia Commons)
+    CONSOLE_ASSET_MAP = {
+        # PlayStation 5
+        167: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/c/cb/PlayStation_5_logo_and_wordmark.svg"
+        },
+        # PlayStation 4
+        48: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Sony-PlayStation-4-PS4-Console-FL.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/c/c4/PlayStation_4_-_Logo.svg"
+        },
+        # PlayStation 3
+        9: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/d/d3/PS3Versions.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/0/05/PlayStation_3_logo_%282009%29.svg"
+        },
+        # Xbox Series X|S
+        169: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/2/25/Xbox_Series_X_2_%28transparent_background%29.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/a/af/Xbox_Series_X_logo.svg"
+        },
+        # Xbox One
+        49: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/4/4a/X_Box_One_logo.svg"
+        },
+        # Xbox 360
+        12: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/6/69/Xbox360.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Xbox_360_logo.svg"
+        },
+        # Nintendo Switch
+        130: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/d/dc/Nintendo_Switch_logo_transparent_%2B_wordmark.png"
+        },
+        # Wii U
+        41: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Wii_U_Console_and_Gamepad.png/800px-Wii_U_Console_and_Gamepad.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/7/7e/WiiU.svg"
+        },
+        # Wii
+        5: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1c/Wii_logo.png"
+        },
+        # Nintendo 3DS
+        37: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Nintendo-3DS-AquaOpen.png/800px-Nintendo-3DS-AquaOpen.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/8/89/Nintendo_3DS_logo.svg"
+        }
     }
 
-    # Fetch comprehensive platform data
+    # API Sorgusu
     api_sorgusu = (
-        "fields name, summary, platform_logo.url, platform_logo.image_id, "
-        "platform_family.name, category, generation, "
-        "versions.name, versions.summary, "
-        "websites.url, websites.category; "
+        "fields name, summary, platform_family.name, category, generation, "
+        "versions.name, versions.summary; "
         f"where id = {console_ids};"
         "limit 10;"
     )
@@ -479,17 +548,9 @@ def load_consoles(cnx, cursor):
         "VALUES (%s, %s, %s, %s, %s)"
     )
 
-    # Storage capacity mapping based on generation/platform
     storage_map = {
-        1: "8GB",  # First generation
-        2: "16GB",
-        3: "32GB",
-        4: "64GB",
-        5: "128GB",
-        6: "256GB",
-        7: "512GB",
-        8: "1TB",
-        9: "2TB",
+        1: "8GB", 2: "16GB", 3: "32GB", 4: "64GB",
+        5: "128GB", 6: "256GB", 7: "512GB", 8: "1TB", 9: "2TB"
     }
 
     for console in console_list:
@@ -498,15 +559,13 @@ def load_consoles(cnx, cursor):
             console_name = console.get("name", "İsimsiz Konsol")
             console_summary = console.get("summary", "Açıklama yok.")
             console_brand = console.get("platform_family", {}).get("name", "Bilinmiyor")
-
-            # Try to get generation for storage estimation
-            generation = console.get("generation", 8)  # Default to modern generation
-            storage = storage_map.get(generation, "1TB")
-
-            # Generate price based on generation
+            generation = console.get("generation", 8)
+            
+            fake_storage = storage_map.get(generation, "1TB")
             base_price = 199.99
             fake_price = round(base_price + (generation * 50), 2)
-
+            
+            # IGDB'de olmayan varsayılan veriler
             fake_release_date = "2020-11-12"
             fake_weight = 4.5
             fake_dims = "39x26x10 cm"
@@ -515,64 +574,40 @@ def load_consoles(cnx, cursor):
             fake_warranty = 12
 
             # --- 2. PRODUCT Tablosuna Ekle ---
-            cursor.execute(
-                query_product,
-                (
-                    console_name,
-                    console_summary,
-                    fake_release_date,
-                    fake_price,
-                    console_brand,
-                    fake_weight,
-                    fake_dims,
-                ),
-            )
+            cursor.execute(query_product, (
+                console_name, console_summary, fake_release_date,
+                fake_price, console_brand, fake_weight, fake_dims
+            ))
             yeni_product_id = cursor.lastrowid
 
             # --- 3. CONSOLE Tablosuna Ekle ---
-            cursor.execute(
-                query_console,
-                (
-                    yeni_product_id,
-                    console_brand,
-                    console_name,
-                    storage,
-                    fake_color,
-                    fake_accessories,
-                    fake_warranty,
-                ),
-            )
+            cursor.execute(query_console, (
+                yeni_product_id, console_brand, console_name, fake_storage,
+                fake_color, fake_accessories, fake_warranty
+            ))
 
-            # --- 4. Add platform logo as media (Main Image) ---
-            platform_logo = console.get("platform_logo")
-            logo_url = None
+            # --- 4. MEDYA YÜKLEME (MANUEL HARİTADAN) ---
+            console_id = int(console.get("id"))
             
-            if platform_logo:
-                logo_url = platform_logo.get("url", "")
+            # Haritamızda bu konsol var mı?
+            assets = CONSOLE_ASSET_MAP.get(console_id)
+            
+            if assets:
+                # 4a. Donanım Resmi (Main Image)
+                hardware_url = assets.get("hardware")
+                if hardware_url:
+                    cursor.execute(
+                        query_media, (yeni_product_id, "photo", hardware_url, 0, True)
+                    )
+                
+                # 4b. Logo Resmi (Secondary Image)
+                logo_url = assets.get("logo")
                 if logo_url:
-                    if logo_url.startswith("//"):
-                        logo_url = "https:" + logo_url
-                        # Upgrade thumbnail size to better quality
-                        logo_url = logo_url.replace("/t_thumb/", "/t_720p/")
-                    elif not logo_url.startswith("http"):
-                        image_id = platform_logo.get("image_id", "")
-                        if image_id:
-                            logo_url = f"https://images.igdb.com/igdb/image/upload/t_720p/{image_id}.png"
-
-            if logo_url:
-                cursor.execute(
-                    query_media, (yeni_product_id, "photo", logo_url, 0, True)
-                )
-            
-            # --- 5. Add hardware image as secondary media ---
-            console_id = console.get("id")
-            hardware_url = CONSOLE_IMAGE_MAP.get(console_id)
-
-            if hardware_url:
-                # Use manual high-res image as secondary image
-                cursor.execute(
-                    query_media, (yeni_product_id, "photo", hardware_url, 1, False)
-                )
+                    cursor.execute(
+                        query_media, (yeni_product_id, "photo", logo_url, 1, False)
+                    )
+            else:
+                print(f"  > UYARI: ID {console_id} için görsel haritası bulunamadı.")
 
             cnx.commit()
             print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")

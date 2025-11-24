@@ -28,9 +28,9 @@ const ProductCard = ({ product }) => {
   return (
     <Link to={`/products/${product.product_id}`} className="product-card-link">
       <div className="pixel-product-card">
-        <div className="product-image-container">
-          <img 
-            src={imageUrl} 
+        <div className={`product-image-container type-${product.product_type}`}>
+          <img
+            src={imageUrl}
             alt={product.product_name}
             className="product-image"
             onError={(e) => {
@@ -43,10 +43,10 @@ const ProductCard = ({ product }) => {
             </div>
           )}
         </div>
-        
+
         <div className="product-info">
           <h3 className="product-name">{product.product_name}</h3>
-          
+
           {product.product_type === 'game' && (
             <div className="product-details">
               {product.platform && (
@@ -57,7 +57,7 @@ const ProductCard = ({ product }) => {
               )}
             </div>
           )}
-          
+
           {product.product_type === 'console' && (
             <div className="product-details">
               {product.manufacturer && (
@@ -68,10 +68,10 @@ const ProductCard = ({ product }) => {
               )}
             </div>
           )}
-          
+
           <div className="product-footer">
             <span className="product-price">${price}</span>
-            <button 
+            <button
               className="pixel-button add-cart-btn"
               onClick={handleAddToCart}
             >
