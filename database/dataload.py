@@ -30,12 +30,24 @@ def clear_data(cnx, cursor):
     print("--- Veritabanı Sıfırlanıyor (TRUNCATE) ---")
 
     tables_to_truncate = [
+        "SALE",
+        "RETURN",
+        "PURCHASE",
+        "REVIEW",
+        "CART",
+        "BRANCH",
+        "ORDER_DETAIL",
+        "ORDER",
+        "ADDRESS",
+        "CUSTOMER",
+        "SUPPLIER",
         "GAME_GENRE",
         "GAME",
         "CONSOLE",
         "PRODUCT_MEDIA",
         "PRODUCT",
         "GENRE",
+        "INVENTORY",
     ]
 
     try:
@@ -45,7 +57,7 @@ def clear_data(cnx, cursor):
         for table in tables_to_truncate:
             print(f"  > '{table}' tablosu boşaltılıyor...", end="")
             try:
-                cursor.execute(f"TRUNCATE TABLE {table}")
+                cursor.execute(f"TRUNCATE TABLE `{table}`")
                 print("OK")
             except mysql.connector.Error as err:
                 if err.errno == 1146:  # Hata: Table doesn't exist

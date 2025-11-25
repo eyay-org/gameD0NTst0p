@@ -56,14 +56,38 @@ def load_customers(cnx, cursor):
 
     query = """
         INSERT INTO CUSTOMER 
-        (first_name, last_name, email, password_hash, phone, registration_date, active_status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        (first_name, last_name, email, password_hash, phone, registration_date, active_status, is_admin)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     customer_ids = []
     emails_used = set(existing_emails)  # Start with existing emails
     max_attempts = 10  # Maximum attempts to generate unique email
 
+    # --- Create Admin User First ---
+    admin_email = "admin@gamestore.com"
+    if admin_email not in existing_emails:
+        try:
+            cursor.execute(
+                query,
+                (
+                    "Admin",
+                    "User",
+                    admin_email,
+                    hash_password("admin123"),
+                    fake.phone_number()[:20],
+                    datetime.now().date(),
+                    True,  # active_status
+                    True   # is_admin
+                ),
+            )
+            customer_ids.append(cursor.lastrowid)
+            emails_used.add(admin_email)
+            print("  [OK] Created Admin User: admin@gamestore.com")
+        except mysql.connector.Error as e:
+            print(f"  [X] Error inserting admin user: {e}")
+
+    # --- Generate Random Customers ---
     for i in range(NUM_CUSTOMERS):
         first_name = fake.first_name()
         last_name = fake.last_name()
@@ -86,6 +110,7 @@ def load_customers(cnx, cursor):
         phone = fake.phone_number()[:20]  # Limit to 20 chars
         registration_date = fake.date_between(start_date="-2y", end_date="today")
         active_status = random.choice([True, True, True, False])  # 75% active
+        is_admin = False
 
         try:
             cursor.execute(
@@ -98,6 +123,7 @@ def load_customers(cnx, cursor):
                     phone,
                     registration_date,
                     active_status,
+                    is_admin
                 ),
             )
             customer_ids.append(cursor.lastrowid)

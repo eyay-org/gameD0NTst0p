@@ -296,7 +296,7 @@ def login_customer():
         
         password_hash = hash_password(data['password'])
         cursor.execute("""
-            SELECT customer_id, first_name, last_name, email, active_status
+            SELECT customer_id, first_name, last_name, email, active_status, is_admin
             FROM CUSTOMER
             WHERE email = %s AND password_hash = %s
         """, (data['email'], password_hash))
@@ -321,8 +321,130 @@ def login_customer():
             'customer_id': customer['customer_id'],
             'first_name': customer['first_name'],
             'last_name': customer['last_name'],
-            'email': customer['email']
+            'email': customer['email'],
+            'is_admin': bool(customer['is_admin'])
         }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# ADMIN ENDPOINTS
+# ============================================================================
+
+@app.route('/api/admin/stats', methods=['GET'])
+def get_admin_stats():
+    """Get dashboard statistics"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Total Sales
+        cursor.execute("SELECT SUM(total_amount) as total_sales FROM `ORDER` WHERE order_status != 'cancelled'")
+        total_sales = cursor.fetchone()['total_sales'] or 0
+        
+        # Total Orders
+        cursor.execute("SELECT COUNT(*) as total_orders FROM `ORDER`")
+        total_orders = cursor.fetchone()['total_orders']
+        
+        # Total Products
+        cursor.execute("SELECT COUNT(*) as total_products FROM PRODUCT")
+        total_products = cursor.fetchone()['total_products']
+        
+        # Low Stock Count (Products with stock < alert level in any branch)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT p.product_id) as low_stock_count
+            FROM PRODUCT p
+            JOIN INVENTORY i ON p.product_id = i.product_id
+            WHERE i.quantity <= p.stock_alert_level
+        """)
+        low_stock_count = cursor.fetchone()['low_stock_count']
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({
+            'total_sales': float(total_sales),
+            'total_orders': total_orders,
+            'total_products': total_products,
+            'low_stock_count': low_stock_count
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/inventory', methods=['GET'])
+def get_admin_inventory():
+    """Get inventory with branch details"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                p.product_id,
+                p.product_name,
+                p.stock_alert_level,
+                b.branch_name,
+                i.quantity,
+                i.last_update_date
+            FROM INVENTORY i
+            JOIN PRODUCT p ON i.product_id = p.product_id
+            JOIN BRANCH b ON i.branch_id = b.branch_id
+            ORDER BY p.product_name, b.branch_name
+        """
+        
+        cursor.execute(query)
+        inventory = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(inventory), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/orders', methods=['GET'])
+def get_admin_orders():
+    """Get all orders for admin"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                o.order_id,
+                o.order_date,
+                o.order_status,
+                o.total_amount,
+                c.first_name,
+                c.last_name,
+                c.email
+            FROM `ORDER` o
+            LEFT JOIN CUSTOMER c ON o.customer_id = c.customer_id
+            ORDER BY o.order_date DESC
+        """
+        
+        cursor.execute(query)
+        orders = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(orders), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -544,7 +666,7 @@ def create_review():
         cursor = cnx.cursor()
         cursor.execute("""
             INSERT INTO REVIEW (customer_id, product_id, rating, review_title, review_text, approved)
-            VALUES (%s, %s, %s, %s, %s, FALSE)
+            VALUES (%s, %s, %s, %s, %s, TRUE)
         """, (
             data['customer_id'],
             data['product_id'],
@@ -558,6 +680,65 @@ def create_review():
         cnx.close()
         
         return jsonify({'message': 'Review submitted'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/orders/<int:order_id>/status', methods=['PUT'])
+def update_order_status(order_id):
+    """Update order status"""
+    try:
+        data = request.json
+        new_status = data.get('status')
+        
+        if not new_status:
+            return jsonify({'error': 'Status is required'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Order status updated'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/products/<int:product_id>/eligibility/<int:customer_id>', methods=['GET'])
+def check_review_eligibility(product_id, customer_id):
+    """Check if customer can review product"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        
+        # Check if user has a delivered order containing this product
+        query = """
+            SELECT 1
+            FROM `ORDER` o
+            JOIN ORDER_DETAIL od ON o.order_id = od.order_id
+            WHERE o.customer_id = %s 
+              AND od.product_id = %s 
+              AND o.order_status = 'delivered'
+            LIMIT 1
+        """
+        cursor.execute(query, (customer_id, product_id))
+        can_review = cursor.fetchone() is not None
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'can_review': can_review}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

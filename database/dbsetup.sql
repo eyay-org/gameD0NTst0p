@@ -17,11 +17,12 @@ CREATE TABLE IF NOT EXISTS `CUSTOMER` (
   `registration_date` DATE,
   `last_login_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `active_status` BOOLEAN DEFAULT TRUE,
+  `is_admin` BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (`customer_id`),
   UNIQUE KEY `uk_email` (`email`)
 );
 
--- PRODUCT Table (Superclass)
+-- PRODUCT Table
 CREATE TABLE IF NOT EXISTS `PRODUCT` (
   `product_id` INT NOT NULL AUTO_INCREMENT,
   `product_name` VARCHAR(200) NOT NULL,
@@ -45,7 +46,6 @@ CREATE TABLE IF NOT EXISTS `SUPPLIER` (
   `supplier_name` VARCHAR(150) NOT NULL,
   `payment_terms` VARCHAR(100),
   `active_status` BOOLEAN DEFAULT TRUE,
-  -- Rapordaki 'contact_info' kompozit alanı düzleştirildi
   `contact_address` TEXT,
   `contact_phone` VARCHAR(20),
   `contact_email` VARCHAR(100),
@@ -141,7 +141,6 @@ CREATE TABLE IF NOT EXISTS `ORDER` (
   `tracking_number` VARCHAR(50),
   `estimated_delivery_date` DATE,
   `actual_delivery_date` DATE,
-  -- Rapordaki 'delivery_address' ve 'billing_address' kompozit alanları düzleştirildi
   `delivery_full_address` TEXT,
   `delivery_city` VARCHAR(100),
   `billing_full_address` TEXT,
