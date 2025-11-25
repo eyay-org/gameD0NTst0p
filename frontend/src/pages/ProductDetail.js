@@ -138,7 +138,7 @@ const ProductDetail = () => {
   const price = parseFloat(product.price).toFixed(2);
 
   return (
-    <div className="product-detail-page">
+    <div className={'product-detail-page ' + (product.product_type === 'console' ? 'is-console' : '')}>
       {lightboxIndex !== null && product.media && (
         <div className="lightbox-overlay" onClick={closeLightbox}>
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
@@ -231,7 +231,29 @@ const ProductDetail = () => {
           <div className="product-info-section">
             <h1 className="product-title">{product.product_name}</h1>
 
-            <div className="product-price-large">${price}</div>
+            <div className="product-price-large">
+              ${price}
+              {product.total_stock > 0 ? (
+                <span className={`stock-badge ${product.total_stock < 5 ? 'low' : 'in-stock'}`}>
+                  {product.total_stock < 5 ? `ONLY ${product.total_stock} LEFT!` : 'IN STOCK'}
+                </span>
+              ) : (
+                <span className="stock-badge out-of-stock">OUT OF STOCK</span>
+              )}
+            </div>
+
+            {product.available_at && product.available_at.length > 0 && (
+              <div className="branch-availability">
+                <span className="spec-label">AVAILABLE AT:</span>
+                <div className="branch-list">
+                  {product.available_at.map((branch, idx) => (
+                    <span key={idx} className="branch-tag">
+                      {branch}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {product.product_type === 'game' && (
               <div className="product-specs">
@@ -317,15 +339,18 @@ const ProductDetail = () => {
                   type="number"
                   className="pixel-input quantity-input"
                   min="1"
+                  max={product.total_stock}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setQuantity(Math.min(product.total_stock, Math.max(1, parseInt(e.target.value) || 1)))}
+                  disabled={product.total_stock === 0}
                 />
               </div>
               <button
-                className="pixel-button success add-cart-large"
+                className={`pixel-button success add-cart-large ${product.total_stock === 0 ? 'disabled' : ''}`}
                 onClick={handleAddToCart}
+                disabled={product.total_stock === 0}
               >
-                ADD TO CART
+                {product.total_stock === 0 ? 'OUT OF STOCK' : 'ADD TO CART'}
               </button>
             </div>
 

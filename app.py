@@ -206,6 +206,18 @@ def get_product(product_id):
             ORDER BY r.review_date DESC
         """, (product_id,))
         product['reviews'] = cursor.fetchall()
+
+        # Get Inventory Data (Total Stock & Branch Availability)
+        cursor.execute("""
+            SELECT b.branch_name, i.quantity
+            FROM INVENTORY i
+            JOIN BRANCH b ON i.branch_id = b.branch_id
+            WHERE i.product_id = %s AND i.quantity > 0
+        """, (product_id,))
+        inventory_rows = cursor.fetchall()
+        
+        product['total_stock'] = sum(row['quantity'] for row in inventory_rows) if inventory_rows else 0
+        product['available_at'] = [row['branch_name'] for row in inventory_rows] if inventory_rows else []
         
         cursor.close()
         cnx.close()
