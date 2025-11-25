@@ -17,22 +17,22 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      
+
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       let data;
-      
+
       if (contentType && contentType.includes('application/json')) {
         data = await response.json();
       } else {
         const text = await response.text();
         throw new Error(`Server error: ${text || response.statusText}`);
       }
-      
+
       if (!response.ok) {
         throw new Error(data.error || `Request failed with status ${response.status}`);
       }
-      
+
       return data;
     } catch (error) {
       console.error('API Error:', error);
@@ -113,6 +113,30 @@ class ApiService {
       method: 'POST',
       body: reviewData,
     });
+  }
+
+  async updateOrderStatus(orderId, status) {
+    return this.request(`/orders/${orderId}/status`, {
+      method: 'PUT',
+      body: { status },
+    });
+  }
+
+  async checkReviewEligibility(productId, customerId) {
+    return this.request(`/products/${productId}/eligibility/${customerId}`);
+  }
+
+  // Admin
+  async getAdminStats() {
+    return this.request('/admin/stats');
+  }
+
+  async getAdminInventory() {
+    return this.request('/admin/inventory');
+  }
+
+  async getAdminOrders() {
+    return this.request('/admin/orders');
   }
 }
 

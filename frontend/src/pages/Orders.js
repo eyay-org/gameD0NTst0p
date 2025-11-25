@@ -42,7 +42,7 @@ const Orders = () => {
         {orders.length === 0 ? (
           <div className="empty-orders">
             <p>YOU HAVE NO ORDERS YET</p>
-            <button 
+            <button
               className="pixel-button"
               onClick={() => navigate('/products')}
             >
@@ -64,6 +64,26 @@ const Orders = () => {
                     <span className={`status-badge ${order.order_status}`}>
                       {order.order_status.toUpperCase()}
                     </span>
+                    {order.order_status !== 'delivered' && (
+                      <button
+                        className="pixel-button small"
+                        style={{ marginLeft: '10px' }}
+                        onClick={async () => {
+                          if (window.confirm('Did you receive this order?')) {
+                            try {
+                              await api.updateOrderStatus(order.order_id, 'delivered');
+                              // Refresh orders
+                              const data = await api.getOrders(user.customer_id);
+                              setOrders(data);
+                            } catch (error) {
+                              alert('Failed to update status');
+                            }
+                          }
+                        }}
+                      >
+                        TESLİM ALDIM
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="order-details">

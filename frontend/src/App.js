@@ -10,6 +10,10 @@ import Checkout from './pages/Checkout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Orders from './pages/Orders';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import InventoryManager from './pages/admin/InventoryManager';
+import OrderManager from './pages/admin/OrderManager';
 import './App.css';
 
 function App() {
@@ -28,6 +32,13 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/orders" element={<Orders />} />
+
+              {/* Admin Routes */}
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminDashboard />} />
+                <Route path="inventory" element={<InventoryManager />} />
+                <Route path="orders" element={<OrderManager />} />
+              </Route>
             </Routes>
           </main>
         </div>

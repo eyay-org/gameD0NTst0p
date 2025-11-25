@@ -11,6 +11,12 @@ const ProductDetail = () => {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [canReview, setCanReview] = useState(false);
+  const [reviewForm, setReviewForm] = useState({
+    rating: 5,
+    review_title: '',
+    review_text: ''
+  });
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
   useEffect(() => {
@@ -28,7 +34,22 @@ const ProductDetail = () => {
     };
 
     loadProduct();
+    loadProduct();
   }, [productId, navigate]);
+
+  useEffect(() => {
+    const checkEligibility = async () => {
+      if (user && product) {
+        try {
+          const result = await api.checkReviewEligibility(product.product_id, user.customer_id);
+          setCanReview(result.can_review);
+        } catch (error) {
+          console.error('Failed to check eligibility:', error);
+        }
+      }
+    };
+    checkEligibility();
+  }, [user, product]);
 
   // Keyboard navigation for lightbox
   useEffect(() => {
@@ -47,6 +68,24 @@ const ProductDetail = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lightboxIndex, product]);
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.createReview({
+        customer_id: user.customer_id,
+        product_id: product.product_id,
+        ...reviewForm
+      });
+      alert('Review submitted!');
+      // Reload product to show new review
+      const data = await api.getProduct(productId);
+      setProduct(data);
+      setReviewForm({ rating: 5, review_title: '', review_text: '' });
+    } catch (error) {
+      alert('Failed to submit review: ' + error.message);
+    }
+  };
 
   const handleAddToCart = async () => {
     if (!user) {
@@ -290,29 +329,89 @@ const ProductDetail = () => {
               </button>
             </div>
 
-            {product.reviews && product.reviews.length > 0 && (
-              <div className="product-reviews">
-                <h3>REVIEWS:</h3>
-                {product.reviews.map(review => (
-                  <div key={review.review_id} className="review-item">
-                    <div className="review-header">
-                      <span className="review-author">
-                        {review.first_name} {review.last_name}
-                      </span>
-                      <span className="review-rating">
-                        {'⭐'.repeat(review.rating)}
-                      </span>
+            {/* Review Section */}
+            <div className="product-reviews-section">
+              <h3>REVIEWS ({product.reviews?.length || 0})</h3>
+
+              {user && canReview ? (
+                <form onSubmit={handleReviewSubmit} className="review-form">
+                  <h4>WRITE A REVIEW</h4>
+                  <div className="form-group">
+                    <label>RATING:</label>
+                    <div className="star-rating-input">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <span
+                          key={star}
+                          className={`star ${star <= reviewForm.rating ? 'active' : ''}`}
+                          onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                        >
+                          ★
+                        </span>
+                      ))}
                     </div>
-                    {review.review_title && (
-                      <h4 className="review-title">{review.review_title}</h4>
-                    )}
-                    {review.review_text && (
-                      <p className="review-text">{review.review_text}</p>
-                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="form-group">
+                    <label>TITLE:</label>
+                    <input
+                      type="text"
+                      className="pixel-input"
+                      value={reviewForm.review_title}
+                      onChange={e => setReviewForm({ ...reviewForm, review_title: e.target.value })}
+                      placeholder="Review Title"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>REVIEW:</label>
+                    <textarea
+                      className="pixel-input"
+                      value={reviewForm.review_text}
+                      onChange={e => setReviewForm({ ...reviewForm, review_text: e.target.value })}
+                      placeholder="Write your review here..."
+                      required
+                      rows="4"
+                    />
+                  </div>
+                  <button type="submit" className="pixel-button success">SUBMIT REVIEW</button>
+                </form>
+              ) : (
+                user && (
+                  <div className="review-notice">
+                    <p>Bu ürünü değerlendirmek için satın almalı ve teslim almalısınız.</p>
+                  </div>
+                )
+              )}
+
+              {product.reviews && product.reviews.length > 0 ? (
+                <div className="reviews-list">
+                  {product.reviews.map(review => (
+                    <div key={review.review_id} className="review-item">
+                      <div className="review-header">
+                        <span className="review-author">
+                          {review.first_name} {review.last_name}
+                        </span>
+                        <span className="review-rating">
+                          {'⭐'.repeat(review.rating)}
+                        </span>
+                        <span className="review-date">
+                          {new Date(review.review_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {review.review_title && (
+                        <h4 className="review-title">{review.review_title}</h4>
+                      )}
+                      {review.review_text && (
+                        <p className="review-text">{review.review_text}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-reviews">
+                  <p>Henüz yorum yapılmamış.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

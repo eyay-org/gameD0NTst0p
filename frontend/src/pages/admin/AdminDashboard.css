@@ -1,0 +1,66 @@
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 25px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-icon {
+    font-size: 40px;
+    background-color: #f8f9fa;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-info h3 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    color: #7f8c8d;
+    font-weight: 600;
+}
+
+.stat-value {
+    margin: 0;
+    font-size: 24px;
+    font-weight: bold;
+    color: #2c3e50;
+    font-family: 'Roboto', sans-serif;
+}
+
+.stat-card.sales .stat-icon {
+    background-color: #e8f8f5;
+    color: #2ecc71;
+}
+
+.stat-card.orders .stat-icon {
+    background-color: #eaf2f8;
+    color: #3498db;
+}
+
+.stat-card.products .stat-icon {
+    background-color: #fef9e7;
+    color: #f1c40f;
+}
+
+.stat-card.alerts .stat-icon {
+    background-color: #fdedec;
+    color: #e74c3c;
+}
