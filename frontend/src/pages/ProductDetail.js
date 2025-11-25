@@ -63,15 +63,12 @@ const ProductDetail = () => {
     }
   };
 
-  if (loading) {
-    return <div className="loading">LOADING...</div>;
-  }
-
-  if (!product) {
-    return null;
-  }
-
-  const price = parseFloat(product.price).toFixed(2);
+  const getYouTubeId = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
 
   const openLightbox = (index) => {
     setLightboxIndex(index);
@@ -91,6 +88,16 @@ const ProductDetail = () => {
     setLightboxIndex((prev) => (prev - 1 + product.media.length) % product.media.length);
   };
 
+  if (loading) {
+    return <div className="loading">LOADING...</div>;
+  }
+
+  if (!product) {
+    return null;
+  }
+
+  const price = parseFloat(product.price).toFixed(2);
+
   return (
     <div className="product-detail-page">
       {lightboxIndex !== null && product.media && (
@@ -99,7 +106,18 @@ const ProductDetail = () => {
             <button className="lightbox-nav-btn prev" onClick={prevImage}>&#10094;</button>
 
             {product.media[lightboxIndex].media_type === 'video' ? (
-              <div className="lightbox-video-placeholder">VIDEO NOT SUPPORTED IN LIGHTBOX</div>
+              <div className="lightbox-video-wrapper" style={{ width: '80vw', height: '80vh' }}>
+                <iframe
+                  width="100%"
+                  height="100%"
+                  src={`https://www.youtube.com/embed/${getYouTubeId(product.media[lightboxIndex].media_url)}?autoplay=1`}
+                  title="YouTube video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="lightbox-iframe"
+                ></iframe>
+              </div>
             ) : (
               <img
                 src={product.media[lightboxIndex].media_url}
@@ -138,20 +156,34 @@ const ProductDetail = () => {
               <div className="screenshots-section">
                 <h3 className="section-title">SCREENSHOTS & MEDIA</h3>
                 <div className="product-gallery">
-                  {product.media.map((media, idx) => (
-                    <div key={idx} className="gallery-item">
-                      {media.media_type === 'video' ? (
-                        <div className="video-placeholder">VIDEO</div>
-                      ) : (
-                        <img
-                          src={media.media_url}
-                          alt={`${product.product_name} screenshot ${idx + 1}`}
-                          className="gallery-image"
-                          onClick={() => openLightbox(idx)}
-                        />
-                      )}
-                    </div>
-                  ))}
+                  {product.media.map((media, idx) => {
+                    const isVideo = media.media_type === 'video';
+                    const videoId = isVideo ? getYouTubeId(media.media_url) : null;
+                    const thumbnailUrl = isVideo
+                      ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+                      : media.media_url;
+
+                    return (
+                      <div key={idx} className="gallery-item" onClick={() => openLightbox(idx)}>
+                        {isVideo ? (
+                          <div className="video-placeholder-container">
+                            <img src={thumbnailUrl} alt="Video Thumbnail" className="video-thumb" />
+                            <div className="play-icon-overlay">
+                              <svg className="play-icon-svg" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </div>
+                          </div>
+                        ) : (
+                          <img
+                            src={thumbnailUrl}
+                            alt={`${product.product_name} screenshot ${idx + 1}`}
+                            className="gallery-image"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -289,4 +321,3 @@ const ProductDetail = () => {
 };
 
 export default ProductDetail;
-
