@@ -18,6 +18,7 @@ const ProductDetail = () => {
     review_text: ''
   });
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [hoverRating, setHoverRating] = useState(0);
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -353,91 +354,95 @@ const ProductDetail = () => {
                 {product.total_stock === 0 ? 'OUT OF STOCK' : 'ADD TO CART'}
               </button>
             </div>
+          </div>
+        </div>
 
-            {/* Review Section */}
-            <div className="product-reviews-section">
-              <h3>REVIEWS ({product.reviews?.length || 0})</h3>
+        {/* Review Section - Moved outside grid */}
+        <div className="product-reviews-section">
+          <h3>REVIEWS ({product.reviews?.length || 0})</h3>
 
-              {user && canReview ? (
-                <form onSubmit={handleReviewSubmit} className="review-form">
-                  <h4>WRITE A REVIEW</h4>
-                  <div className="form-group">
-                    <label>RATING:</label>
-                    <div className="star-rating-input">
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <span
-                          key={star}
-                          className={`star ${star <= reviewForm.rating ? 'active' : ''}`}
-                          onClick={() => setReviewForm({ ...reviewForm, rating: star })}
-                        >
-                          ★
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>TITLE:</label>
-                    <input
-                      type="text"
-                      className="pixel-input"
-                      value={reviewForm.review_title}
-                      onChange={e => setReviewForm({ ...reviewForm, review_title: e.target.value })}
-                      placeholder="Review Title"
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>REVIEW:</label>
-                    <textarea
-                      className="pixel-input"
-                      value={reviewForm.review_text}
-                      onChange={e => setReviewForm({ ...reviewForm, review_text: e.target.value })}
-                      placeholder="Write your review here..."
-                      required
-                      rows="4"
-                    />
-                  </div>
-                  <button type="submit" className="pixel-button success">SUBMIT REVIEW</button>
-                </form>
-              ) : (
-                user && (
-                  <div className="review-notice">
-                    <p>Bu ürünü değerlendirmek için satın almalı ve teslim almalısınız.</p>
-                  </div>
-                )
-              )}
+          {user && canReview ? (
+            <form onSubmit={handleReviewSubmit} className="review-form">
+              <h4>WRITE A REVIEW</h4>
+              <div className="form-group">
+                <label>RATING:</label>
 
-              {product.reviews && product.reviews.length > 0 ? (
-                <div className="reviews-list">
-                  {product.reviews.map(review => (
-                    <div key={review.review_id} className="review-item">
-                      <div className="review-header">
-                        <span className="review-author">
-                          {review.first_name} {review.last_name}
-                        </span>
-                        <span className="review-rating">
-                          {'⭐'.repeat(review.rating)}
-                        </span>
-                        <span className="review-date">
-                          {new Date(review.review_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {review.review_title && (
-                        <h4 className="review-title">{review.review_title}</h4>
-                      )}
-                      {review.review_text && (
-                        <p className="review-text">{review.review_text}</p>
-                      )}
-                    </div>
+                <div className="star-rating-container">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-btn ${star <= (hoverRating || reviewForm.rating) ? 'active' : ''}`}
+                      onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                    >
+                      ★
+                    </button>
                   ))}
                 </div>
-              ) : (
-                <div className="no-reviews">
-                  <p>Henüz yorum yapılmamış.</p>
+              </div>
+              <div className="form-group">
+                <label>TITLE:</label>
+                <input
+                  type="text"
+                  className="pixel-input"
+                  value={reviewForm.review_title}
+                  onChange={e => setReviewForm({ ...reviewForm, review_title: e.target.value })}
+                  placeholder="Review Title"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>REVIEW:</label>
+                <textarea
+                  className="pixel-input"
+                  value={reviewForm.review_text}
+                  onChange={e => setReviewForm({ ...reviewForm, review_text: e.target.value })}
+                  placeholder="Write your review here..."
+                  required
+                  rows="4"
+                />
+              </div>
+              <button type="submit" className="pixel-button success">SUBMIT REVIEW</button>
+            </form>
+          ) : (
+            user && (
+              <div className="review-notice">
+                <p>You must purchase and receive this product to write a review.</p>
+              </div>
+            )
+          )}
+
+          {product.reviews && product.reviews.length > 0 ? (
+            <div className="reviews-list">
+              {product.reviews.map(review => (
+                <div key={review.review_id} className="review-item">
+                  <div className="review-header">
+                    <span className="review-author">
+                      {review.first_name} {review.last_name}
+                    </span>
+                    <span className="review-rating">
+                      {'⭐'.repeat(review.rating)}
+                    </span>
+                    <span className="review-date">
+                      {new Date(review.review_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {review.review_title && (
+                    <h4 className="review-title">{review.review_title}</h4>
+                  )}
+                  {review.review_text && (
+                    <p className="review-text">{review.review_text}</p>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          </div>
+          ) : (
+            <div className="no-reviews">
+              <p>No reviews yet.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
