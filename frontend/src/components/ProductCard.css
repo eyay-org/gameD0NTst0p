@@ -1,0 +1,127 @@
+.product-card-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.pixel-product-card {
+  background: #2a2a3e;
+  border: 4px solid #4a90e2;
+  padding: 0;
+  box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pixel-product-card:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: 12px 12px 0px rgba(0, 0, 0, 0.3);
+  border-color: #5ba0f2;
+}
+
+.product-image-container {
+  position: relative;
+  width: 100%;
+  height: 250px;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+
+.product-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+.product-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #4a90e2;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 8px;
+  border: 2px solid #2e5c8a;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.3);
+}
+
+.product-info {
+  padding: 15px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.product-name {
+  font-size: 12px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+  color: #fff;
+  min-height: 40px;
+}
+
+.product-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 15px;
+}
+
+.detail-tag {
+  background: #1a1a2e;
+  border: 2px solid #4a90e2;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: #4a90e2;
+}
+
+.detail-tag.rating {
+  background: #e24a4a;
+  border-color: #8a2e2e;
+  color: #fff;
+}
+
+.product-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 2px solid #1a1a2e;
+}
+
+.product-price {
+  font-size: 14px;
+  color: #4ae24a;
+  font-weight: bold;
+}
+
+.add-cart-btn {
+  font-size: 8px;
+  padding: 8px 16px;
+}
+
+@media (max-width: 768px) {
+  .product-image-container {
+    height: 200px;
+  }
+  
+  .product-name {
+    font-size: 10px;
+  }
+  
+  .product-footer {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .add-cart-btn {
+    width: 100%;
+  }
+}
+

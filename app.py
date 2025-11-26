@@ -1,0 +1,568 @@
+"""
+Flask Backend API for Game Store
+Provides RESTful endpoints for frontend
+"""
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import mysql.connector
+import os
+from dotenv import load_dotenv
+from datetime import datetime
+import hashlib
+
+load_dotenv()
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for React frontend
+
+# Database configuration
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASS', ''),
+    'database': os.getenv('DB_NAME', 'oyun_satis_db'),
+    'port': int(os.getenv('DB_PORT', 3306))
+}
+
+
+def get_db_connection():
+    """Create and return database connection"""
+    try:
+        return mysql.connector.connect(**DB_CONFIG)
+    except mysql.connector.Error as err:
+        print(f"Database connection error: {err}")
+        return None
+
+
+def hash_password(password):
+    """Hash password using SHA256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+# ============================================================================
+# PRODUCT ENDPOINTS
+# ============================================================================
+
+@app.route('/api/products', methods=['GET'])
+def get_products():
+    """Get all products with optional filters"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Get query parameters
+        product_type = request.args.get('type')  # 'game' or 'console'
+        genre = request.args.get('genre')
+        platform = request.args.get('platform')
+        search = request.args.get('search')
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        # Build query
+        query = """
+            SELECT 
+                p.product_id,
+                p.product_name,
+                p.description,
+                p.price,
+                p.release_date,
+                p.product_type,
+                p.brand,
+                p.status,
+                pm.media_url as main_image
+            FROM PRODUCT p
+            LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            WHERE 1=1
+        """
+        params = []
+        
+        if product_type:
+            query += " AND p.product_type = %s"
+            params.append(product_type)
+        
+        if search:
+            query += " AND (p.product_name LIKE %s OR p.description LIKE %s)"
+            params.extend([f'%{search}%', f'%{search}%'])
+        
+        query += " ORDER BY p.product_id DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        cursor.execute(query, params)
+        products = cursor.fetchall()
+        
+        # Get additional details for games
+        for product in products:
+            if product['product_type'] == 'game':
+                cursor.execute("""
+                    SELECT platform, developer, publisher, ESRB_rating, multiplayer
+                    FROM GAME WHERE product_id = %s
+                """, (product['product_id'],))
+                game_info = cursor.fetchone()
+                if game_info:
+                    product.update(game_info)
+                
+                # Get genres
+                cursor.execute("""
+                    SELECT g.genre_name
+                    FROM GAME_GENRE gg
+                    JOIN GENRE g ON gg.genre_id = g.genre_id
+                    WHERE gg.product_id = %s
+                """, (product['product_id'],))
+                product['genres'] = [row['genre_name'] for row in cursor.fetchall()]
+            
+            elif product['product_type'] == 'console':
+                cursor.execute("""
+                    SELECT manufacturer, model, storage_capacity, color
+                    FROM CONSOLE WHERE product_id = %s
+                """, (product['product_id'],))
+                console_info = cursor.fetchone()
+                if console_info:
+                    product.update(console_info)
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(products), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/products/<int:product_id>', methods=['GET'])
+def get_product(product_id):
+    """Get single product details"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Get product
+        cursor.execute("""
+            SELECT 
+                p.*,
+                pm.media_url as main_image
+            FROM PRODUCT p
+            LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            WHERE p.product_id = %s
+        """, (product_id,))
+        product = cursor.fetchone()
+        
+        if not product:
+            cursor.close()
+            cnx.close()
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # Get all media
+        cursor.execute("""
+            SELECT media_type, media_url, order_no
+            FROM PRODUCT_MEDIA
+            WHERE product_id = %s
+            ORDER BY order_no
+        """, (product_id,))
+        product['media'] = cursor.fetchall()
+        
+        # Get game or console details
+        if product['product_type'] == 'game':
+            cursor.execute("SELECT * FROM GAME WHERE product_id = %s", (product_id,))
+            game_info = cursor.fetchone()
+            if game_info:
+                product.update(game_info)
+            
+            # Get genres
+            cursor.execute("""
+                SELECT g.genre_id, g.genre_name
+                FROM GAME_GENRE gg
+                JOIN GENRE g ON gg.genre_id = g.genre_id
+                WHERE gg.product_id = %s
+            """, (product_id,))
+            product['genres'] = cursor.fetchall()
+        
+        elif product['product_type'] == 'console':
+            cursor.execute("SELECT * FROM CONSOLE WHERE product_id = %s", (product_id,))
+            console_info = cursor.fetchone()
+            if console_info:
+                product.update(console_info)
+        
+        # Get reviews
+        cursor.execute("""
+            SELECT 
+                r.review_id,
+                r.rating,
+                r.review_title,
+                r.review_text,
+                r.review_date,
+                r.helpful_count,
+                c.first_name,
+                c.last_name
+            FROM REVIEW r
+            LEFT JOIN CUSTOMER c ON r.customer_id = c.customer_id
+            WHERE r.product_id = %s AND r.approved = TRUE
+            ORDER BY r.review_date DESC
+        """, (product_id,))
+        product['reviews'] = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(product), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/genres', methods=['GET'])
+def get_genres():
+    """Get all genres"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("SELECT genre_id, genre_name, description FROM GENRE ORDER BY genre_name")
+        genres = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(genres), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# CUSTOMER ENDPOINTS
+# ============================================================================
+
+@app.route('/api/customers/register', methods=['POST'])
+def register_customer():
+    """Register a new customer"""
+    try:
+        data = request.json
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        
+        # Check if email exists
+        cursor.execute("SELECT customer_id FROM CUSTOMER WHERE email = %s", (data['email'],))
+        if cursor.fetchone():
+            cursor.close()
+            cnx.close()
+            return jsonify({'error': 'Email already exists'}), 400
+        
+        # Insert customer
+        cursor.execute("""
+            INSERT INTO CUSTOMER (first_name, last_name, email, password_hash, phone, registration_date)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            data['first_name'],
+            data['last_name'],
+            data['email'],
+            hash_password(data['password']),
+            data.get('phone'),
+            datetime.now().date()
+        ))
+        
+        customer_id = cursor.lastrowid
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'customer_id': customer_id, 'message': 'Registration successful'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/customers/login', methods=['POST'])
+def login_customer():
+    """Login customer"""
+    try:
+        data = request.json
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        password_hash = hash_password(data['password'])
+        cursor.execute("""
+            SELECT customer_id, first_name, last_name, email, active_status
+            FROM CUSTOMER
+            WHERE email = %s AND password_hash = %s
+        """, (data['email'], password_hash))
+        
+        customer = cursor.fetchone()
+        
+        if not customer or not customer['active_status']:
+            cursor.close()
+            cnx.close()
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        # Update last login
+        cursor.execute("""
+            UPDATE CUSTOMER SET last_login_date = NOW() WHERE customer_id = %s
+        """, (customer['customer_id'],))
+        cnx.commit()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({
+            'customer_id': customer['customer_id'],
+            'first_name': customer['first_name'],
+            'last_name': customer['last_name'],
+            'email': customer['email']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# CART ENDPOINTS
+# ============================================================================
+
+@app.route('/api/cart/<int:customer_id>', methods=['GET'])
+def get_cart(customer_id):
+    """Get customer cart"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                c.product_id,
+                c.quantity,
+                c.added_date,
+                p.product_name,
+                p.price,
+                p.product_type,
+                pm.media_url as image
+            FROM CART c
+            JOIN PRODUCT p ON c.product_id = p.product_id
+            LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            WHERE c.customer_id = %s
+        """, (customer_id,))
+        
+        cart_items = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(cart_items), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cart', methods=['POST'])
+def add_to_cart():
+    """Add item to cart"""
+    try:
+        data = request.json
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        
+        # Check if item already in cart
+        cursor.execute("""
+            SELECT quantity FROM CART 
+            WHERE customer_id = %s AND product_id = %s
+        """, (data['customer_id'], data['product_id']))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update quantity
+            new_quantity = existing[0] + data.get('quantity', 1)
+            cursor.execute("""
+                UPDATE CART SET quantity = %s WHERE customer_id = %s AND product_id = %s
+            """, (new_quantity, data['customer_id'], data['product_id']))
+        else:
+            # Insert new item
+            cursor.execute("""
+                INSERT INTO CART (customer_id, product_id, quantity)
+                VALUES (%s, %s, %s)
+            """, (data['customer_id'], data['product_id'], data.get('quantity', 1)))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Item added to cart'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cart/<int:customer_id>/<int:product_id>', methods=['DELETE'])
+def remove_from_cart(customer_id, product_id):
+    """Remove item from cart"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        cursor.execute("""
+            DELETE FROM CART WHERE customer_id = %s AND product_id = %s
+        """, (customer_id, product_id))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Item removed from cart'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# ORDER ENDPOINTS
+# ============================================================================
+
+@app.route('/api/orders', methods=['POST'])
+def create_order():
+    """Create a new order"""
+    try:
+        data = request.json
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        
+        # Create order
+        cursor.execute("""
+            INSERT INTO `ORDER` (
+                customer_id, order_status, total_amount, shipping_fee,
+                payment_method, payment_status,
+                delivery_full_address, delivery_city,
+                billing_full_address, billing_city
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data['customer_id'],
+            'pending',
+            data['total_amount'],
+            data.get('shipping_fee', 0),
+            data.get('payment_method', 'credit_card'),
+            'pending',
+            data.get('delivery_address', ''),
+            data.get('delivery_city', ''),
+            data.get('billing_address', ''),
+            data.get('billing_city', '')
+        ))
+        
+        order_id = cursor.lastrowid
+        
+        # Add order details
+        for item in data['items']:
+            cursor.execute("""
+                INSERT INTO ORDER_DETAIL (order_id, line_no, product_id, quantity, unit_price)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                order_id,
+                item['line_no'],
+                item['product_id'],
+                item['quantity'],
+                item['unit_price']
+            ))
+        
+        # Clear cart
+        cursor.execute("DELETE FROM CART WHERE customer_id = %s", (data['customer_id'],))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'order_id': order_id, 'message': 'Order created successfully'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/orders/<int:customer_id>', methods=['GET'])
+def get_orders(customer_id):
+    """Get customer orders"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                order_id,
+                order_date,
+                order_status,
+                total_amount,
+                payment_status,
+                tracking_number
+            FROM `ORDER`
+            WHERE customer_id = %s
+            ORDER BY order_date DESC
+        """, (customer_id,))
+        
+        orders = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(orders), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# REVIEW ENDPOINTS
+# ============================================================================
+
+@app.route('/api/reviews', methods=['POST'])
+def create_review():
+    """Create a product review"""
+    try:
+        data = request.json
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor()
+        cursor.execute("""
+            INSERT INTO REVIEW (customer_id, product_id, rating, review_title, review_text, approved)
+            VALUES (%s, %s, %s, %s, %s, FALSE)
+        """, (
+            data['customer_id'],
+            data['product_id'],
+            data['rating'],
+            data.get('review_title', ''),
+            data.get('review_text', '')
+        ))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Review submitted'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
+

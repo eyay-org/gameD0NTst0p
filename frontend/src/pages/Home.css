@@ -1,0 +1,67 @@
+.home-page {
+  min-height: 100vh;
+}
+
+.hero-section {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  padding: 80px 20px;
+  text-align: center;
+  border-bottom: 4px solid #4a90e2;
+}
+
+.hero-title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  text-shadow: 4px 4px 0px #4a90e2;
+  animation: pixel-blink 2s infinite;
+}
+
+.hero-subtitle {
+  font-size: 10px;
+  margin-bottom: 30px;
+  color: #4a90e2;
+  line-height: 1.6;
+}
+
+.hero-cta {
+  font-size: 12px;
+  padding: 16px 32px;
+}
+
+.featured-section {
+  padding: 60px 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  margin-bottom: 30px;
+  text-align: center;
+  text-shadow: 2px 2px 0px #4a90e2;
+}
+
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.section-footer {
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 18px;
+  }
+  
+  .hero-subtitle {
+    font-size: 8px;
+  }
+  
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+}
+
