@@ -69,13 +69,135 @@ const InventoryManager = () => {
         return sortConfig.direction === 'asc' ? '↑' : '↓';
     };
 
+    const [showHistory, setShowHistory] = useState(false);
+    const [stockLogs, setStockLogs] = useState([]);
+
+    const fetchStockLogs = async () => {
+        try {
+            const response = await api.getAdminStockLogs();
+            console.log("API Response:", response);
+
+            // Safe extraction logic
+            const logsData = response.logs || response;
+
+            if (Array.isArray(logsData)) {
+                setStockLogs(logsData);
+                setShowHistory(true);
+            } else {
+                console.error("Data format error. Received:", response);
+                setStockLogs([]); // Fallback to empty array
+                alert('Received invalid data format from server');
+            }
+        } catch (error) {
+            console.error('Failed to load stock logs:', error);
+            alert('Failed to load history');
+        }
+    };
+
+
+
     if (loading && !inventory.length) return <div className="loading">LOADING...</div>;
 
     return (
         <div className="admin-page">
             <div className="admin-page-header">
                 <h1 className="admin-title">INVENTORY MANAGEMENT</h1>
+                <button
+                    className="pixel-button"
+                    onClick={fetchStockLogs}
+                >
+                    VIEW HISTORY (LOGS)
+                </button>
             </div>
+
+            {showHistory && (
+                <div className="modal-overlay" onClick={() => setShowHistory(false)} style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 1000,
+                    backdropFilter: 'blur(2px)'
+                }}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{
+                        maxWidth: '800px',
+                        background: '#2a2a3e',
+                        border: '4px solid #4a90e2',
+                        padding: '20px',
+                        width: '90%',
+                        maxHeight: '90vh',
+                        overflowY: 'auto',
+                        position: 'relative',
+                        boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)'
+                    }}>
+                        <div className="modal-header" style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '20px',
+                            borderBottom: '2px solid #4a90e2',
+                            paddingBottom: '10px'
+                        }}>
+                            <h2 style={{ fontSize: '16px', color: '#4a90e2', margin: 0 }}>STOCK UPDATE HISTORY (TRIGGER LOGS)</h2>
+                            <button
+                                className="close-btn"
+                                onClick={() => setShowHistory(false)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    fontSize: '24px',
+                                    cursor: 'pointer',
+                                    fontFamily: '"Press Start 2P", cursive'
+                                }}
+                            >×</button>
+                        </div>
+                        <div className="modal-body">
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>DATE</th>
+                                        <th>PRODUCT</th>
+                                        <th>BRANCH</th>
+                                        <th>OLD QTY</th>
+                                        <th>NEW QTY</th>
+                                        <th>CHANGE</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stockLogs.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>No logs found.</td>
+                                        </tr>
+                                    ) : (
+                                        stockLogs.map(log => (
+                                            <tr key={log.log_id}>
+                                                <td>{new Date(log.change_date).toLocaleString()}</td>
+                                                <td>{log.product_name}</td>
+                                                <td>{log.branch_name}</td>
+                                                <td>{log.old_quantity}</td>
+                                                <td>{log.new_quantity}</td>
+                                                <td style={{
+                                                    color: log.new_quantity > log.old_quantity ? '#4ade80' : '#ef4444',
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    {log.new_quantity > log.old_quantity ? '+' : ''}
+                                                    {log.new_quantity - log.old_quantity}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="admin-card">
                 <table className="admin-table">
@@ -148,6 +270,7 @@ const InventoryManager = () => {
             </div>
         </div>
     );
+
 };
 
 export default InventoryManager;

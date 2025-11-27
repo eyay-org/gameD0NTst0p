@@ -590,52 +590,45 @@ def get_admin_inventory():
 
 @app.route('/api/admin/orders', methods=['GET'])
 def get_admin_orders():
-    """Get all orders with pagination and sorting"""
+    """Get all orders for admin with pagination and sorting using VIEW"""
     try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        sort_by = request.args.get('sort_by', 'order_date')
+        order = request.args.get('order', 'desc')
+        
+        offset = (page - 1) * limit
+        
+        # Validate sort column to prevent SQL injection
+        valid_columns = {
+            'order_id': 'order_id',
+            'customer_name': 'customer_name',
+            'order_date': 'order_date',
+            'total_amount': 'total_amount',
+            'order_status': 'order_status',
+            'item_count': 'item_count'
+        }
+        
+        sort_column = valid_columns.get(sort_by, 'order_date')
+        if order.lower() not in ['asc', 'desc']:
+            order = 'desc'
+
         cnx = get_db_connection()
         if not cnx:
             return jsonify({'error': 'Database connection failed'}), 500
         
         cursor = cnx.cursor(dictionary=True)
         
-        # Pagination & Sorting Params
-        page = request.args.get('page', 1, type=int)
-        limit = request.args.get('limit', 20, type=int)
-        sort_by = request.args.get('sort_by', 'date')
-        order = request.args.get('order', 'desc')
+        # 1. Get Total Count
+        cursor.execute("SELECT COUNT(*) as total FROM VIEW_ORDER_SUMMARY")
+        total_records = cursor.fetchone()['total']
+        total_pages = math.ceil(total_records / limit)
         
-        offset = (page - 1) * limit
-        
-        # Column Mapping
-        sort_mapping = {
-            'id': 'o.order_id',
-            'customer': 'c.email',
-            'date': 'o.order_date',
-            'total': 'o.total_amount',
-            'status': 'o.order_status'
-        }
-        
-        sort_column = sort_mapping.get(sort_by, 'o.order_date')
-        sort_direction = 'DESC' if order == 'desc' else 'ASC'
-        
-        # Count Query
-        cursor.execute("SELECT COUNT(*) as total FROM `ORDER`")
-        total_count = cursor.fetchone()['total']
-        total_pages = math.ceil(total_count / limit)
-        
-        # Data Query
+        # 2. Get Paginated Data from VIEW
         query = f"""
-            SELECT 
-                o.order_id,
-                o.order_date,
-                o.order_status,
-                o.total_amount,
-                c.first_name,
-                c.last_name,
-                c.email
-            FROM `ORDER` o
-            LEFT JOIN CUSTOMER c ON o.customer_id = c.customer_id
-            ORDER BY {sort_column} {sort_direction}
+            SELECT *
+            FROM VIEW_ORDER_SUMMARY
+            ORDER BY {sort_column} {order}
             LIMIT %s OFFSET %s
         """
         
@@ -647,13 +640,66 @@ def get_admin_orders():
         
         return jsonify({
             'data': orders,
-            'total': total_count,
+            'total': total_records,
             'pages': total_pages,
             'current_page': page
         }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stock-logs', methods=['GET'])
+def get_stock_logs():
+    cursor = None
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'success': False, 'error': 'Database connection failed'}), 500
+            
+        cursor = cnx.cursor()
+        
+        # Join STOCK_LOG with PRODUCT and BRANCH to get readable names
+        query = """
+            SELECT 
+                l.log_id, 
+                p.product_name, 
+                b.branch_name, 
+                l.old_quantity, 
+                l.new_quantity, 
+                l.change_date
+            FROM STOCK_LOG l
+            JOIN PRODUCT p ON l.product_id = p.product_id
+            JOIN BRANCH b ON l.branch_id = b.branch_id
+            ORDER BY l.change_date DESC
+            LIMIT 50
+        """
+        
+        cursor.execute(query)
+        logs = cursor.fetchall()
+        
+        # Map to dictionary (Ensure keys match Frontend expectations)
+        log_list = []
+        for log in logs:
+            log_list.append({
+                'log_id': log[0],
+                'product_name': log[1],
+                'branch_name': log[2],
+                'old_quantity': log[3],
+                'new_quantity': log[4],
+                'change_date': log[5]
+            })
+            
+        return jsonify({'success': True, 'logs': log_list}), 200
+
+    except Exception as e:
+        print(f"Error fetching stock logs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if 'cnx' in locals() and cnx:
+            cnx.close()
 
 
 # ============================================================================

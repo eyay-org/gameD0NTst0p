@@ -402,3 +402,38 @@ FROM INVENTORY i
 JOIN PRODUCT p ON i.product_id = p.product_id
 JOIN BRANCH b ON i.branch_id = b.branch_id
 WHERE i.quantity <= i.minimum_stock;
+
+-- ============================================================================
+-- SIRA 5: TRIGGERS & LOGS (OTOMASYON)
+-- ============================================================================
+
+-- STOCK_LOG Table
+CREATE TABLE IF NOT EXISTS `STOCK_LOG` (
+  `log_id` INT NOT NULL AUTO_INCREMENT,
+  `product_id` INT NOT NULL,
+  `branch_id` INT NOT NULL,
+  `old_quantity` INT,
+  `new_quantity` INT,
+  `change_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`log_id`),
+  CONSTRAINT `fk_log_product`
+    FOREIGN KEY (`product_id`) REFERENCES `PRODUCT` (`product_id`)
+    ON DELETE CASCADE,
+  CONSTRAINT `fk_log_branch`
+    FOREIGN KEY (`branch_id`) REFERENCES `BRANCH` (`branch_id`)
+    ON DELETE CASCADE
+);
+
+-- TRIGGER: after_inventory_update
+-- Stok değiştiğinde otomatik loglama yapar
+DELIMITER //
+CREATE TRIGGER after_inventory_update
+AFTER UPDATE ON INVENTORY
+FOR EACH ROW
+BEGIN
+    IF OLD.quantity != NEW.quantity THEN
+        INSERT INTO STOCK_LOG (product_id, branch_id, old_quantity, new_quantity, change_date)
+        VALUES (NEW.product_id, NEW.branch_id, OLD.quantity, NEW.quantity, NOW());
+    END IF;
+END//
+DELIMITER ;

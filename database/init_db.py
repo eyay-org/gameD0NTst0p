@@ -37,19 +37,44 @@ def full_reset():
         # Read SQL file
         sql_path = os.path.join(os.path.dirname(__file__), 'dbsetup.sql')
         with open(sql_path, 'r', encoding='utf-8') as f:
-            sql_script = f.read()
+            lines = f.readlines()
             
-        # Split and execute commands
-        commands = sql_script.split(';')
+        # Parse and execute commands respecting DELIMITER
+        current_delimiter = ';'
+        buffer = []
         
-        for command in commands:
-            cleaned_command = command.strip()
-            if cleaned_command:
-                try:
-                    cursor.execute(cleaned_command)
-                except mysql.connector.Error as err:
-                    print(f"Warning (Command skipped): {err}")
-                    # print(f"Command: {cleaned_command[:50]}...")
+        for line in lines:
+            stripped = line.strip()
+            
+            # Handle DELIMITER command
+            if stripped.upper().startswith('DELIMITER'):
+                current_delimiter = stripped.split()[1]
+                continue
+                
+            # Skip comments and empty lines if buffer is empty
+            if not buffer and (not stripped or stripped.startswith('--')):
+                continue
+                
+            buffer.append(line)
+            
+            # Check if command ends with current delimiter
+            # We check the stripped line to handle trailing whitespace
+            if stripped.endswith(current_delimiter):
+                # Remove delimiter from the end
+                command = ''.join(buffer).strip()
+                
+                # Handle the case where delimiter might be multi-char like //
+                if command.endswith(current_delimiter):
+                    command = command[:-len(current_delimiter)]
+                
+                if command.strip():
+                    try:
+                        cursor.execute(command)
+                    except mysql.connector.Error as err:
+                        print(f"Warning (Command skipped): {err}")
+                        # print(f"Command: {command[:50]}...")
+                
+                buffer = []
         
         cnx.commit()
         print("Database schema re-created successfully.")

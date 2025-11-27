@@ -113,7 +113,7 @@ const OrderManager = () => {
                             <tr key={order.order_id}>
                                 <td>#{order.order_id}</td>
                                 <td>
-                                    {order.first_name} {order.last_name}
+                                    {order.customer_name}
                                     <br />
                                     <small style={{ color: '#94a3b8' }}>{order.email}</small>
                                 </td>
