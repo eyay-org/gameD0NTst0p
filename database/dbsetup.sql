@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `ADDRESS` (
 -- GAME Table (Subclass of PRODUCT)
 CREATE TABLE IF NOT EXISTS `GAME` (
   `product_id` INT NOT NULL,
-  `platform` VARCHAR(50),
+  `platform` VARCHAR(255),
   `developer` VARCHAR(100),
   `publisher` VARCHAR(100),
   `ESRB_rating` VARCHAR(10),

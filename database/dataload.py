@@ -237,11 +237,8 @@ def load_games(cnx, cursor, igdb_genre_map):
 
             # Join platforms and truncate to fit VARCHAR(50) limit
             platform_name = (
-                ", ".join(platform_names[:3]) if platform_names else "Bilinmiyor"
+                ", ".join(platform_names) if platform_names else "Bilinmiyor"
             )
-            if len(platform_name) > 50:
-                # Truncate to fit the column size, try to keep it readable
-                platform_name = platform_name[:47] + "..."
 
             # Extract ESRB Rating
             esrb_rating_text = None

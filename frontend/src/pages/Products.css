@@ -54,14 +54,13 @@
   .filters-section {
     flex-direction: column;
   }
-  
+
   .filter-group {
     width: 100%;
   }
-  
+
   .products-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 20px;
   }
 }
-

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import './ProductDetail.css';
@@ -292,9 +292,14 @@ const ProductDetail = () => {
                     <span className="spec-label">GENRES:</span>
                     <div className="genres-list">
                       {product.genres.map((genre, idx) => (
-                        <span key={idx} className="genre-tag">
+                        <Link
+                          key={idx}
+                          to={`/products?genre=${encodeURIComponent(genre.genre_name || genre)}`}
+                          className="genre-tag"
+                          style={{ textDecoration: 'none', color: 'inherit' }}
+                        >
                           {genre.genre_name || genre}
-                        </span>
+                        </Link>
                       ))}
                     </div>
                   </div>

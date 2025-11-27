@@ -6,30 +6,52 @@ import './Products.css';
 import './ErrorDisplay.css';
 
 const Products = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [genres, setGenres] = useState([]);
+  const [platforms, setPlatforms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Initialize filters from URL params
   const [filters, setFilters] = useState({
     type: searchParams.get('type') || '',
-    genre: '',
-    search: '',
-    min_price: '',
-    max_price: '',
-    sort_by: 'newest'
+    genre: searchParams.get('genre') || '',
+    search: searchParams.get('search') || '',
+    min_price: searchParams.get('min_price') || '',
+    max_price: searchParams.get('max_price') || '',
+    sort_by: searchParams.get('sort_by') || 'newest',
+    platform: searchParams.get('platform') || '',
+    min_rating: searchParams.get('min_rating') || '',
+    multiplayer: searchParams.get('multiplayer') === 'true',
+    page: parseInt(searchParams.get('page')) || 1
   });
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params = {};
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) {
+        params[key] = filters[key];
+      }
+    });
+    setSearchParams(params);
+  }, [filters, setSearchParams]);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const [productsData, genresData] = await Promise.all([
+        const [productsResponse, genresData, platformsData] = await Promise.all([
           api.getProducts(filters),
-          api.getGenres()
+          api.getGenres(),
+          api.getPlatforms()
         ]);
-        setProducts(productsData);
+        setProducts(productsResponse.products);
+        setTotalPages(productsResponse.total_pages);
         setGenres(genresData);
+        setPlatforms(platformsData);
         setError(null);
       } catch (error) {
         console.error('Failed to load products:', error);
@@ -47,9 +69,15 @@ const Products = () => {
   }, [filters]);
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-    // Do NOT set loading here to avoid unmounting inputs
+    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
     setError(null);
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setFilters(prev => ({ ...prev, page: newPage }));
+      window.scrollTo(0, 0);
+    }
   };
 
   if (error) {
@@ -99,23 +127,63 @@ const Products = () => {
             </select>
           </div>
 
-          {filters.type === 'game' && (
-            <div className="filter-group">
-              <label>GENRE:</label>
-              <select
-                className="pixel-input"
-                value={filters.genre}
-                onChange={(e) => handleFilterChange('genre', e.target.value)}
-              >
-                <option value="">ALL GENRES</option>
-                {genres.map(genre => (
-                  <option key={genre.genre_id} value={genre.genre_name}>
-                    {genre.genre_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="filter-group">
+            <label>PLATFORM:</label>
+            <select
+              className="pixel-input"
+              value={filters.platform}
+              onChange={(e) => handleFilterChange('platform', e.target.value)}
+            >
+              <option value="">ALL PLATFORMS</option>
+              {platforms.map((platform, idx) => (
+                <option key={idx} value={platform}>
+                  {platform}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>GENRE:</label>
+            <select
+              className="pixel-input"
+              value={filters.genre}
+              onChange={(e) => handleFilterChange('genre', e.target.value)}
+            >
+              <option value="">ALL GENRES</option>
+              {genres.map(genre => (
+                <option key={genre.genre_id} value={genre.genre_name}>
+                  {genre.genre_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>RATING:</label>
+            <select
+              className="pixel-input"
+              value={filters.min_rating}
+              onChange={(e) => handleFilterChange('min_rating', e.target.value)}
+            >
+              <option value="">ANY RATING</option>
+              <option value="4">4+ STARS</option>
+              <option value="3">3+ STARS</option>
+              <option value="2">2+ STARS</option>
+            </select>
+          </div>
+
+          <div className="filter-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={filters.multiplayer}
+                onChange={(e) => handleFilterChange('multiplayer', e.target.checked)}
+              />
+              MULTIPLAYER ONLY
+            </label>
+          </div>
+
           <div className="filter-group">
             <label>PRICE RANGE:</label>
             <div className="price-inputs">
@@ -152,6 +220,66 @@ const Products = () => {
           </div>
         </div>
 
+        {/* Active Filters Feedback */}
+        {(filters.genre || filters.platform || filters.min_rating || filters.multiplayer) && (
+          <div className="active-filters" style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 'bold', alignSelf: 'center' }}>FILTERING BY:</span>
+            {filters.genre && (
+              <button
+                className="pixel-button small"
+                onClick={() => handleFilterChange('genre', '')}
+                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
+              >
+                GENRE: {filters.genre} ✖
+              </button>
+            )}
+            {filters.platform && (
+              <button
+                className="pixel-button small"
+                onClick={() => handleFilterChange('platform', '')}
+                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
+              >
+                PLATFORM: {filters.platform} ✖
+              </button>
+            )}
+            {filters.min_rating && (
+              <button
+                className="pixel-button small"
+                onClick={() => handleFilterChange('min_rating', '')}
+                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
+              >
+                {filters.min_rating}+ STARS ✖
+              </button>
+            )}
+            {filters.multiplayer && (
+              <button
+                className="pixel-button small"
+                onClick={() => handleFilterChange('multiplayer', false)}
+                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
+              >
+                MULTIPLAYER ✖
+              </button>
+            )}
+            <button
+              className="pixel-button small danger"
+              onClick={() => setFilters({
+                type: '',
+                genre: '',
+                search: '',
+                min_price: '',
+                max_price: '',
+                sort_by: 'newest',
+                platform: '',
+                min_rating: '',
+                multiplayer: false
+              })}
+              style={{ fontSize: '0.8rem', padding: '5px 10px', marginLeft: 'auto' }}
+            >
+              CLEAR ALL
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="loading-container" style={{ textAlign: 'center', padding: '50px' }}>
             <div className="loading">LOADING...</div>
@@ -169,10 +297,32 @@ const Products = () => {
             )}
           </div>
         )}
+
+        {/* Pagination Controls */}
+        {!loading && products.length > 0 && (
+          <div className="pagination-controls">
+            <button
+              className="pixel-button small"
+              disabled={filters.page <= 1}
+              onClick={() => handlePageChange(filters.page - 1)}
+            >
+              PREV
+            </button>
+            <span className="page-info">
+              PAGE {filters.page} OF {totalPages}
+            </span>
+            <button
+              className="pixel-button small"
+              disabled={filters.page >= totalPages}
+              onClick={() => handlePageChange(filters.page + 1)}
+            >
+              NEXT
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default Products;
-

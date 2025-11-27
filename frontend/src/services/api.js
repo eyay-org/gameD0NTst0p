@@ -58,6 +58,10 @@ class ApiService {
     return this.request('/genres');
   }
 
+  async getPlatforms() {
+    return this.request('/platforms');
+  }
+
   // Customers
   async registerCustomer(customerData) {
     return this.request('/customers/register', {

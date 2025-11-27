@@ -10,6 +10,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 import hashlib
+import math
 
 load_dotenv()
 
@@ -55,69 +56,119 @@ def get_products():
         cursor = cnx.cursor(dictionary=True)
         
         # Get query parameters
-        product_type = request.args.get('type')  # 'game' or 'console'
-        genre = request.args.get('genre')
-        platform = request.args.get('platform')
-        search = request.args.get('search')
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 24, type=int)
+        search = request.args.get('search', '')
+        product_type = request.args.get('type', '')
+        genre = request.args.get('genre', '')
         min_price = request.args.get('min_price', type=float)
         max_price = request.args.get('max_price', type=float)
-        sort_by = request.args.get('sort_by', 'newest')  # newest, price_asc, price_desc, name_asc
-        limit = request.args.get('limit', 50, type=int)
-        offset = request.args.get('offset', 0, type=int)
+        sort_by = request.args.get('sort_by', 'newest')
+        platform = request.args.get('platform', '')
+        min_rating = request.args.get('min_rating', type=float)
+        multiplayer = request.args.get('multiplayer') == 'true'
         
-        # Build query
-        query = """
-            SELECT DISTINCT
-                p.product_id,
-                p.product_name,
-                p.description,
-                p.price,
-                p.release_date,
-                p.product_type,
-                p.brand,
-                p.status,
-                pm.media_url as main_image
-            FROM PRODUCT p
+        offset = (page - 1) * limit
+        
+        # Base Joins
+        joins = """
             LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            LEFT JOIN REVIEW r ON p.product_id = r.product_id
+            LEFT JOIN GAME gm ON p.product_id = gm.product_id
+            LEFT JOIN CONSOLE c ON p.product_id = c.product_id
         """
         
-        # Add joins for filtering
         if genre:
-            query += """
+            joins += """
                 JOIN GAME_GENRE gg ON p.product_id = gg.product_id
                 JOIN GENRE g ON gg.genre_id = g.genre_id
             """
             
-        if platform:
-            query += " JOIN GAME gm ON p.product_id = gm.product_id "
-            
-        query += " WHERE 1=1"
+        # Base Where Clause
+        where_clause = " WHERE 1=1"
         params = []
         
         # Apply filters
         if product_type:
-            query += " AND p.product_type = %s"
+            where_clause += " AND p.product_type = %s"
             params.append(product_type)
             
         if genre:
-            query += " AND g.genre_name = %s"
+            where_clause += " AND g.genre_name = %s"
             params.append(genre)
             
         if platform:
-            query += " AND gm.platform = %s"
-            params.append(platform)
+            if product_type == 'console':
+                where_clause += " AND (c.model LIKE %s OR c.manufacturer LIKE %s)"
+                params.extend([f'%{platform}%', f'%{platform}%'])
+            else:
+                # If filtering by platform and not explicitly looking for consoles, show games
+                if not product_type:
+                    where_clause += " AND p.product_type = 'game'"
+                
+                # Use REGEXP for exact match in comma-separated list
+                # Matches: Start or comma + Platform + End or comma
+                where_clause += " AND gm.platform REGEXP %s"
+                params.append(f'(^|, ){platform}($|,)')
+            
+        if multiplayer:
+            where_clause += " AND gm.multiplayer = TRUE"
         
         if search:
-            query += " AND p.product_name LIKE %s"
+            where_clause += " AND p.product_name LIKE %s"
             params.append(f'%{search}%')
             
         if min_price is not None:
-            query += " AND p.price >= %s"
+            where_clause += " AND p.price >= %s"
             params.append(min_price)
             
         if max_price is not None:
-            query += " AND p.price <= %s"
+            where_clause += " AND p.price <= %s"
             params.append(max_price)
+
+        # --- COUNT QUERY ---
+        if min_rating:
+            # For min_rating, we need to group and check HAVING, so we use a subquery
+            count_query = f"""
+                SELECT COUNT(*) as total FROM (
+                    SELECT p.product_id, COALESCE(AVG(r.rating), 0) as avg_rating
+                    FROM PRODUCT p
+                    {joins}
+                    {where_clause}
+                    GROUP BY p.product_id
+                    HAVING avg_rating >= %s
+                ) as sub
+            """
+            count_params = params + [min_rating]
+        else:
+            # Standard count
+            count_query = f"""
+                SELECT COUNT(DISTINCT p.product_id) as total
+                FROM PRODUCT p
+                {joins}
+                {where_clause}
+            """
+            count_params = params
+
+        cursor.execute(count_query, count_params)
+        total_count = cursor.fetchone()['total']
+        total_pages = math.ceil(total_count / limit)
+
+        # --- DATA QUERY ---
+        query = f"""
+            SELECT p.product_id, p.product_name, p.price, p.product_type, p.release_date,
+                   MAX(pm.media_url) as main_image,
+                   COALESCE(AVG(r.rating), 0) as avg_rating
+            FROM PRODUCT p
+            {joins}
+            {where_clause}
+            GROUP BY p.product_id
+        """
+        
+        # Filter by rating (HAVING clause after GROUP BY)
+        if min_rating:
+            query += " HAVING avg_rating >= %s"
+            params.append(min_rating)
         
         # Apply sorting
         if sort_by == 'price_asc':
@@ -167,7 +218,12 @@ def get_products():
         cursor.close()
         cnx.close()
         
-        return jsonify(products), 200
+        return jsonify({
+            'products': products,
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -285,6 +341,38 @@ def get_genres():
         cnx.close()
         
         return jsonify(genres), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/platforms', methods=['GET'])
+def get_platforms():
+    """Get all unique platforms from games"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("SELECT DISTINCT platform FROM GAME")
+        rows = cursor.fetchall()
+        
+        # Process comma-separated platforms
+        unique_platforms = set()
+        for row in rows:
+            if row['platform']:
+                # Split by comma and strip whitespace
+                platforms = [p.strip() for p in row['platform'].split(',')]
+                unique_platforms.update(platforms)
+        
+        # Sort alphabetically
+        sorted_platforms = sorted(list(unique_platforms))
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(sorted_platforms), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
