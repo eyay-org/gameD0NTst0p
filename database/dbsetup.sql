@@ -297,6 +297,7 @@ CREATE TABLE IF NOT EXISTS `SALE` (
   `cost` DECIMAL(10, 2),
   `profit` DECIMAL(10, 2),
   `sale_type` VARCHAR(20),
+  `sale_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`sale_id`),
   CONSTRAINT `fk_sale_customer`
     FOREIGN KEY (`customer_id`) REFERENCES `CUSTOMER` (`customer_id`)

@@ -54,7 +54,11 @@ const Checkout = () => {
       alert('Order placed successfully!');
       navigate('/orders');
     } catch (error) {
-      alert('Failed to place order: ' + error.message);
+      if (error.message.includes('Out of Stock')) {
+        alert('ORDER FAILED: ' + error.message);
+      } else {
+        alert('Failed to place order: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -66,7 +70,7 @@ const Checkout = () => {
         <div className="container">
           <div className="empty-checkout">
             <p>NO ITEMS TO CHECKOUT</p>
-            <button 
+            <button
               className="pixel-button"
               onClick={() => navigate('/cart')}
             >
@@ -153,8 +157,8 @@ const Checkout = () => {
               </div>
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="pixel-button success checkout-submit"
               disabled={loading}
             >

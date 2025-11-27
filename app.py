@@ -700,63 +700,130 @@ def remove_from_cart(customer_id, product_id):
 
 @app.route('/api/orders', methods=['POST'])
 def create_order():
-    """Create a new order"""
+    """Create a new order with inventory management"""
     try:
         data = request.json
         cnx = get_db_connection()
         if not cnx:
             return jsonify({'error': 'Database connection failed'}), 500
         
+        # Start transaction
+        cnx.start_transaction()
         cursor = cnx.cursor()
         
-        # Create order
-        cursor.execute("""
-            INSERT INTO `ORDER` (
-                customer_id, order_status, total_amount, shipping_fee,
-                payment_method, payment_status,
-                delivery_full_address, delivery_city,
-                billing_full_address, billing_city
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            data['customer_id'],
-            'pending',
-            data['total_amount'],
-            data.get('shipping_fee', 0),
-            data.get('payment_method', 'credit_card'),
-            'pending',
-            data.get('delivery_address', ''),
-            data.get('delivery_city', ''),
-            data.get('billing_address', ''),
-            data.get('billing_city', '')
-        ))
-        
-        order_id = cursor.lastrowid
-        
-        # Add order details
-        for item in data['items']:
+        try:
+            # 1. Stock Check & Reservation
+            item_branch_map = {} # Map product_id to (branch_id, inventory_id)
+            
+            for item in data['items']:
+                product_id = item['product_id']
+                quantity = item['quantity']
+                
+                # Find branch with highest stock (Load Balancing)
+                cursor.execute("""
+                    SELECT inventory_id, branch_id, quantity
+                    FROM INVENTORY
+                    WHERE product_id = %s
+                    ORDER BY quantity DESC
+                    LIMIT 1
+                    FOR UPDATE
+                """, (product_id,))
+                
+                stock_info = cursor.fetchone()
+                
+                if not stock_info or stock_info[2] < quantity:
+                    # Get product name for error message
+                    cursor.execute("SELECT product_name FROM PRODUCT WHERE product_id = %s", (product_id,))
+                    product_name = cursor.fetchone()[0]
+                    raise Exception(f"Out of Stock: {product_name}")
+                
+                # Store branch info for later use
+                item_branch_map[product_id] = {
+                    'inventory_id': stock_info[0],
+                    'branch_id': stock_info[1]
+                }
+                
+                # 2. Deduct Inventory
+                cursor.execute("""
+                    UPDATE INVENTORY 
+                    SET quantity = quantity - %s 
+                    WHERE inventory_id = %s
+                """, (quantity, stock_info[0]))
+
+            # 3. Create Order
             cursor.execute("""
-                INSERT INTO ORDER_DETAIL (order_id, line_no, product_id, quantity, unit_price)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO `ORDER` (
+                    customer_id, order_status, total_amount, shipping_fee,
+                    payment_method, payment_status,
+                    delivery_full_address, delivery_city,
+                    billing_full_address, billing_city
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
-                order_id,
-                item['line_no'],
-                item['product_id'],
-                item['quantity'],
-                item['unit_price']
+                data['customer_id'],
+                'pending',
+                data['total_amount'],
+                data.get('shipping_fee', 0),
+                data.get('payment_method', 'credit_card'),
+                'pending',
+                data.get('delivery_address', ''),
+                data.get('delivery_city', ''),
+                data.get('billing_address', ''),
+                data.get('billing_city', '')
             ))
-        
-        # Clear cart
-        cursor.execute("DELETE FROM CART WHERE customer_id = %s", (data['customer_id'],))
-        
-        cnx.commit()
-        cursor.close()
-        cnx.close()
-        
-        return jsonify({'order_id': order_id, 'message': 'Order created successfully'}), 201
-        
+            
+            order_id = cursor.lastrowid
+            
+            # 4. Add Order Details and Record Sales
+            for item in data['items']:
+                product_id = item['product_id']
+                branch_info = item_branch_map[product_id]
+                
+                # Insert Order Detail
+                cursor.execute("""
+                    INSERT INTO ORDER_DETAIL (order_id, line_no, product_id, quantity, unit_price)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    order_id,
+                    item['line_no'],
+                    product_id,
+                    item['quantity'],
+                    item['unit_price']
+                ))
+                
+                # Insert Sale Record
+                cursor.execute("""
+                    INSERT INTO SALE (order_id, customer_id, branch_id, transaction_date, transaction_amount)
+                    VALUES (%s, %s, %s, NOW(), %s)
+                """, (
+                    order_id,
+                    data['customer_id'],
+                    branch_info['branch_id'],
+                    item['quantity'] * item['unit_price']
+                ))
+            
+            # Clear cart
+            cursor.execute("DELETE FROM CART WHERE customer_id = %s", (data['customer_id'],))
+            
+            cnx.commit()
+            return jsonify({'order_id': order_id, 'message': 'Order created successfully'}), 201
+            
+        except Exception as e:
+            cnx.rollback()
+            error_msg = str(e)
+            if "Out of Stock" in error_msg:
+                return jsonify({'error': error_msg}), 400
+            raise e
+            
     except Exception as e:
+        if 'cnx' in locals() and cnx.is_connected():
+            cnx.close()
         return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'cnx' in locals() and cnx.is_connected():
+            cnx.close()
 
 
 @app.route('/api/orders/<int:customer_id>', methods=['GET'])
