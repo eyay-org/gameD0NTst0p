@@ -1,45 +1,75 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 
 const InventoryManager = () => {
     const [inventory, setInventory] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+        total: 0
+    });
+    const [sortConfig, setSortConfig] = useState({
+        key: 'product_name',
+        direction: 'asc'
+    });
+
+    const fetchInventory = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params = {
+                page: pagination.page,
+                limit: pagination.limit,
+                sort_by: sortConfig.key,
+                order: sortConfig.direction
+            };
+            const response = await api.getAdminInventory(params);
+            setInventory(response.data);
+            setPagination(prev => ({
+                ...prev,
+                totalPages: response.pages,
+                total: response.total
+            }));
+        } catch (error) {
+            console.error('Failed to load inventory:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [pagination.page, pagination.limit, sortConfig.key, sortConfig.direction]);
 
     useEffect(() => {
-        const fetchInventory = async () => {
-            try {
-                const data = await api.getAdminInventory();
-                setInventory(data);
-            } catch (error) {
-                console.error('Failed to load inventory:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchInventory();
-    }, []);
+    }, [fetchInventory]);
 
-    // Pagination Logic
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = inventory.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(inventory.length / itemsPerPage);
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
+        setPagination(prev => ({ ...prev, page: 1 })); // Reset to first page on sort
+    };
 
     const handlePageChange = (newPage) => {
-        if (newPage >= 1 && newPage <= totalPages) {
-            setCurrentPage(newPage);
+        if (newPage >= 1 && newPage <= pagination.totalPages) {
+            setPagination(prev => ({ ...prev, page: newPage }));
         }
     };
 
     const handleRowsPerPageChange = (e) => {
-        setItemsPerPage(Number(e.target.value));
-        setCurrentPage(1); // Reset to first page
+        setPagination(prev => ({
+            ...prev,
+            limit: Number(e.target.value),
+            page: 1
+        }));
     };
 
-    if (loading) return <div className="loading">LOADING...</div>;
+    const getSortIcon = (key) => {
+        if (sortConfig.key !== key) return '↕';
+        return sortConfig.direction === 'asc' ? '↑' : '↓';
+    };
+
+    if (loading && !inventory.length) return <div className="loading">LOADING...</div>;
 
     return (
         <div className="admin-page">
@@ -51,14 +81,22 @@ const InventoryManager = () => {
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            <th>PRODUCT NAME</th>
-                            <th>BRANCH</th>
-                            <th>QUANTITY</th>
-                            <th>LAST UPDATE</th>
+                            <th onClick={() => handleSort('product_name')} style={{ cursor: 'pointer' }}>
+                                PRODUCT NAME {getSortIcon('product_name')}
+                            </th>
+                            <th onClick={() => handleSort('branch_name')} style={{ cursor: 'pointer' }}>
+                                BRANCH {getSortIcon('branch_name')}
+                            </th>
+                            <th onClick={() => handleSort('quantity')} style={{ cursor: 'pointer' }}>
+                                QUANTITY {getSortIcon('quantity')}
+                            </th>
+                            <th onClick={() => handleSort('last_update')} style={{ cursor: 'pointer' }}>
+                                LAST UPDATE {getSortIcon('last_update')}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {currentItems.map((item) => (
+                        {inventory.map((item) => (
                             <tr key={`${item.product_id}-${item.branch_name}`} className={item.quantity <= item.stock_alert_level ? 'low-stock' : ''}>
                                 <td>
                                     {item.product_name}
@@ -78,7 +116,7 @@ const InventoryManager = () => {
                 <div className="pagination-controls">
                     <div className="rows-per-page">
                         Rows per page:
-                        <select value={itemsPerPage} onChange={handleRowsPerPageChange}>
+                        <select value={pagination.limit} onChange={handleRowsPerPageChange}>
                             <option value={20}>20</option>
                             <option value={30}>30</option>
                             <option value={50}>50</option>
@@ -87,21 +125,21 @@ const InventoryManager = () => {
                     </div>
 
                     <div className="pagination-info">
-                        Showing {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, inventory.length)} of {inventory.length} items
+                        Page {pagination.page} of {pagination.totalPages} ({pagination.total} items)
                     </div>
 
                     <div className="pagination-actions">
                         <button
                             className="pagination-btn"
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
+                            onClick={() => handlePageChange(pagination.page - 1)}
+                            disabled={pagination.page === 1}
                         >
                             Previous
                         </button>
                         <button
                             className="pagination-btn"
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
+                            onClick={() => handlePageChange(pagination.page + 1)}
+                            disabled={pagination.page === pagination.totalPages}
                         >
                             Next
                         </button>

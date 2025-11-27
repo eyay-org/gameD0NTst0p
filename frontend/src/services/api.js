@@ -135,14 +135,17 @@ class ApiService {
     return this.request('/admin/stats');
   }
 
-  async getAdminInventory() {
-    return this.request('/admin/inventory');
+  async getAdminInventory(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/admin/inventory${queryString ? `?${queryString}` : ''}`);
   }
 
-  async getAdminOrders() {
-    return this.request('/admin/orders');
+  async getAdminOrders(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/admin/orders${queryString ? `?${queryString}` : ''}`);
   }
 }
 
-export default new ApiService();
+const apiService = new ApiService();
+export default apiService;
 

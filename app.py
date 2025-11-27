@@ -521,7 +521,7 @@ def get_admin_stats():
 
 @app.route('/api/admin/inventory', methods=['GET'])
 def get_admin_inventory():
-    """Get inventory with branch details"""
+    """Get inventory with pagination and sorting"""
     try:
         cnx = get_db_connection()
         if not cnx:
@@ -529,7 +529,32 @@ def get_admin_inventory():
         
         cursor = cnx.cursor(dictionary=True)
         
-        query = """
+        # Pagination & Sorting Params
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        sort_by = request.args.get('sort_by', 'product_name')
+        order = request.args.get('order', 'asc')
+        
+        offset = (page - 1) * limit
+        
+        # Column Mapping for Security
+        sort_mapping = {
+            'product_name': 'p.product_name',
+            'branch_name': 'b.branch_name',
+            'quantity': 'i.quantity',
+            'last_update': 'i.last_update_date'
+        }
+        
+        sort_column = sort_mapping.get(sort_by, 'p.product_name')
+        sort_direction = 'DESC' if order == 'desc' else 'ASC'
+        
+        # Count Query
+        cursor.execute("SELECT COUNT(*) as total FROM INVENTORY")
+        total_count = cursor.fetchone()['total']
+        total_pages = math.ceil(total_count / limit)
+        
+        # Data Query
+        query = f"""
             SELECT 
                 p.product_id,
                 p.product_name,
@@ -540,16 +565,22 @@ def get_admin_inventory():
             FROM INVENTORY i
             JOIN PRODUCT p ON i.product_id = p.product_id
             JOIN BRANCH b ON i.branch_id = b.branch_id
-            ORDER BY p.product_name, b.branch_name
+            ORDER BY {sort_column} {sort_direction}
+            LIMIT %s OFFSET %s
         """
         
-        cursor.execute(query)
+        cursor.execute(query, (limit, offset))
         inventory = cursor.fetchall()
         
         cursor.close()
         cnx.close()
         
-        return jsonify(inventory), 200
+        return jsonify({
+            'data': inventory,
+            'total': total_count,
+            'pages': total_pages,
+            'current_page': page
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -557,7 +588,7 @@ def get_admin_inventory():
 
 @app.route('/api/admin/orders', methods=['GET'])
 def get_admin_orders():
-    """Get all orders for admin"""
+    """Get all orders with pagination and sorting"""
     try:
         cnx = get_db_connection()
         if not cnx:
@@ -565,7 +596,33 @@ def get_admin_orders():
         
         cursor = cnx.cursor(dictionary=True)
         
-        query = """
+        # Pagination & Sorting Params
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        sort_by = request.args.get('sort_by', 'date')
+        order = request.args.get('order', 'desc')
+        
+        offset = (page - 1) * limit
+        
+        # Column Mapping
+        sort_mapping = {
+            'id': 'o.order_id',
+            'customer': 'c.email',
+            'date': 'o.order_date',
+            'total': 'o.total_amount',
+            'status': 'o.order_status'
+        }
+        
+        sort_column = sort_mapping.get(sort_by, 'o.order_date')
+        sort_direction = 'DESC' if order == 'desc' else 'ASC'
+        
+        # Count Query
+        cursor.execute("SELECT COUNT(*) as total FROM `ORDER`")
+        total_count = cursor.fetchone()['total']
+        total_pages = math.ceil(total_count / limit)
+        
+        # Data Query
+        query = f"""
             SELECT 
                 o.order_id,
                 o.order_date,
@@ -576,16 +633,22 @@ def get_admin_orders():
                 c.email
             FROM `ORDER` o
             LEFT JOIN CUSTOMER c ON o.customer_id = c.customer_id
-            ORDER BY o.order_date DESC
+            ORDER BY {sort_column} {sort_direction}
+            LIMIT %s OFFSET %s
         """
         
-        cursor.execute(query)
+        cursor.execute(query, (limit, offset))
         orders = cursor.fetchall()
         
         cursor.close()
         cnx.close()
         
-        return jsonify(orders), 200
+        return jsonify({
+            'data': orders,
+            'total': total_count,
+            'pages': total_pages,
+            'current_page': page
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
