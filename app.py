@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 import hashlib
 import math
+import random
+import string
 
 load_dotenv()
 
@@ -813,15 +815,19 @@ def create_order():
                     WHERE inventory_id = %s
                 """, (quantity, stock_info[0]))
 
+            # Generate Tracking Number
+            tracking_number = 'TR' + ''.join(random.choices(string.digits, k=9))
+
             # 3. Create Order
             cursor.execute("""
                 INSERT INTO `ORDER` (
                     customer_id, order_status, total_amount, shipping_fee,
-                    payment_method, payment_status,
+                    payment_method, payment_status, tracking_number,
                     delivery_full_address, delivery_city,
-                    billing_full_address, billing_city
+                    billing_full_address, billing_city,
+                    order_date
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             """, (
                 data['customer_id'],
                 'pending',
@@ -829,6 +835,7 @@ def create_order():
                 data.get('shipping_fee', 0),
                 data.get('payment_method', 'credit_card'),
                 'pending',
+                tracking_number,
                 data.get('delivery_address', ''),
                 data.get('delivery_city', ''),
                 data.get('billing_address', ''),
@@ -891,31 +898,70 @@ def create_order():
 
 @app.route('/api/orders/<int:customer_id>', methods=['GET'])
 def get_orders(customer_id):
-    """Get customer orders"""
+    """Get customer orders with detailed items"""
     try:
         cnx = get_db_connection()
         if not cnx:
             return jsonify({'error': 'Database connection failed'}), 500
         
         cursor = cnx.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT 
-                order_id,
-                order_date,
-                order_status,
-                total_amount,
-                payment_status,
-                tracking_number
-            FROM `ORDER`
-            WHERE customer_id = %s
-            ORDER BY order_date DESC
-        """, (customer_id,))
         
-        orders = cursor.fetchall()
+        # Query to get orders and their items
+        query = """
+            SELECT 
+                o.order_id,
+                o.order_date,
+                o.order_status,
+                o.total_amount,
+                o.payment_status,
+                o.tracking_number,
+                od.product_id,
+                od.quantity,
+                od.unit_price,
+                p.product_name,
+                pm.media_url as image_url
+            FROM `ORDER` o
+            JOIN ORDER_DETAIL od ON o.order_id = od.order_id
+            JOIN PRODUCT p ON od.product_id = p.product_id
+            LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            WHERE o.customer_id = %s
+            ORDER BY o.order_date DESC
+        """
+        
+        cursor.execute(query, (customer_id,))
+        rows = cursor.fetchall()
+        
+        # Group by order_id
+        orders_map = {}
+        for row in rows:
+            order_id = row['order_id']
+            if order_id not in orders_map:
+                orders_map[order_id] = {
+                    'order_id': order_id,
+                    'order_date': row['order_date'],
+                    'order_status': row['order_status'],
+                    'total_amount': float(row['total_amount']),
+                    'payment_status': row['payment_status'],
+                    'tracking_number': row['tracking_number'],
+                    'items': []
+                }
+            
+            orders_map[order_id]['items'].append({
+                'product_id': row['product_id'],
+                'product_name': row['product_name'],
+                'quantity': row['quantity'],
+                'unit_price': float(row['unit_price']),
+                'image_url': row['image_url']
+            })
+        
+        # Convert map to list and sort by date (descending)
+        orders_list = list(orders_map.values())
+        orders_list.sort(key=lambda x: x['order_date'], reverse=True)
+        
         cursor.close()
         cnx.close()
         
-        return jsonify(orders), 200
+        return jsonify(orders_list), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
