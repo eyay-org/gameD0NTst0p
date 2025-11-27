@@ -15,10 +15,14 @@ const Products = () => {
     type: searchParams.get('type') || '',
     genre: '',
     search: '',
+    min_price: '',
+    max_price: '',
+    sort_by: 'newest'
   });
 
   useEffect(() => {
     const loadData = async () => {
+      setLoading(true);
       try {
         const [productsData, genresData] = await Promise.all([
           api.getProducts(filters),
@@ -35,18 +39,18 @@ const Products = () => {
       }
     };
 
-    loadData();
+    const timer = setTimeout(() => {
+      loadData();
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, [filters]);
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
-    setLoading(true);
+    // Do NOT set loading here to avoid unmounting inputs
     setError(null);
   };
-
-  if (loading) {
-    return <div className="loading">LOADING...</div>;
-  }
 
   if (error) {
     return (
@@ -69,7 +73,7 @@ const Products = () => {
     <div className="products-page">
       <div className="container">
         <h1 className="page-title">🛒 PRODUCTS</h1>
-        
+
         <div className="filters-section">
           <div className="filter-group">
             <label>SEARCH:</label>
@@ -81,7 +85,7 @@ const Products = () => {
               onChange={(e) => handleFilterChange('search', e.target.value)}
             />
           </div>
-          
+
           <div className="filter-group">
             <label>TYPE:</label>
             <select
@@ -94,7 +98,7 @@ const Products = () => {
               <option value="console">CONSOLES</option>
             </select>
           </div>
-          
+
           {filters.type === 'game' && (
             <div className="filter-group">
               <label>GENRE:</label>
@@ -112,19 +116,59 @@ const Products = () => {
               </select>
             </div>
           )}
+          <div className="filter-group">
+            <label>PRICE RANGE:</label>
+            <div className="price-inputs">
+              <input
+                type="number"
+                className="pixel-input"
+                placeholder="MIN"
+                value={filters.min_price}
+                onChange={(e) => handleFilterChange('min_price', e.target.value)}
+              />
+              <span className="separator">-</span>
+              <input
+                type="number"
+                className="pixel-input"
+                placeholder="MAX"
+                value={filters.max_price}
+                onChange={(e) => handleFilterChange('max_price', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <label>SORT BY:</label>
+            <select
+              className="pixel-input"
+              value={filters.sort_by}
+              onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+            >
+              <option value="newest">NEWEST</option>
+              <option value="price_asc">PRICE: LOW TO HIGH</option>
+              <option value="price_desc">PRICE: HIGH TO LOW</option>
+              <option value="name_asc">NAME: A-Z</option>
+            </select>
+          </div>
         </div>
 
-        <div className="products-grid">
-          {products.length > 0 ? (
-            products.map(product => (
-              <ProductCard key={product.product_id} product={product} />
-            ))
-          ) : (
-            <div className="no-products">
-              <p>NO PRODUCTS FOUND</p>
-            </div>
-          )}
-        </div>
+        {loading ? (
+          <div className="loading-container" style={{ textAlign: 'center', padding: '50px' }}>
+            <div className="loading">LOADING...</div>
+          </div>
+        ) : (
+          <div className="products-grid">
+            {products.length > 0 ? (
+              products.map(product => (
+                <ProductCard key={product.product_id} product={product} />
+              ))
+            ) : (
+              <div className="no-products">
+                <p>NO PRODUCTS FOUND</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

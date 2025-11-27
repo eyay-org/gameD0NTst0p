@@ -330,3 +330,74 @@ CREATE TABLE IF NOT EXISTS `INVENTORY` (
     ON DELETE CASCADE,
   CONSTRAINT `chk_quantity` CHECK (`quantity` >= 0)
 );
+
+-- ============================================================================
+-- SIRA 4: INDEXES & VIEWS (PERFORMANS VE RAPORLAMA)
+-- ============================================================================
+
+-- 4.1 INDEXES (Sorgu Performansı İçin)
+-- Ürün aramaları ve sıralamaları için indeksler
+CREATE INDEX idx_product_name ON PRODUCT(product_name);
+CREATE INDEX idx_product_price ON PRODUCT(price);
+CREATE INDEX idx_product_type ON PRODUCT(product_type);
+
+-- Sipariş sorguları için indeksler
+CREATE INDEX idx_order_date ON `ORDER`(order_date);
+CREATE INDEX idx_order_customer ON `ORDER`(customer_id);
+
+-- Oyun filtreleme için indeks
+CREATE INDEX idx_game_rating ON GAME(ESRB_rating);
+
+-- 4.2 VIEWS (Karmaşık Sorguları Basitleştirmek İçin)
+
+-- VIEW 1: VIEW_PRODUCT_DETAILS
+-- Tüm ürünleri (Game ve Console) tek bir tabloda gibi listeler
+CREATE OR REPLACE VIEW VIEW_PRODUCT_DETAILS AS
+SELECT 
+    p.product_id,
+    p.product_name,
+    p.price,
+    p.product_type,
+    p.brand,
+    p.status,
+    -- Oyun detayları (Varsa)
+    g.platform,
+    g.developer,
+    g.ESRB_rating,
+    -- Konsol detayları (Varsa)
+    c.manufacturer,
+    c.storage_capacity,
+    c.color
+FROM PRODUCT p
+LEFT JOIN GAME g ON p.product_id = g.product_id
+LEFT JOIN CONSOLE c ON p.product_id = c.product_id;
+
+-- VIEW 2: VIEW_ORDER_SUMMARY
+-- Admin paneli için hızlı sipariş özeti
+CREATE OR REPLACE VIEW VIEW_ORDER_SUMMARY AS
+SELECT 
+    o.order_id,
+    o.order_date,
+    o.order_status,
+    o.total_amount,
+    CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+    c.email,
+    COUNT(od.line_no) as item_count
+FROM `ORDER` o
+JOIN CUSTOMER c ON o.customer_id = c.customer_id
+LEFT JOIN ORDER_DETAIL od ON o.order_id = od.order_id
+GROUP BY o.order_id;
+
+-- VIEW 3: VIEW_LOW_STOCK
+-- Kritik stok seviyesinin altındaki ürünleri listeler
+CREATE OR REPLACE VIEW VIEW_LOW_STOCK AS
+SELECT 
+    i.inventory_id,
+    p.product_name,
+    b.branch_name,
+    i.quantity,
+    i.minimum_stock
+FROM INVENTORY i
+JOIN PRODUCT p ON i.product_id = p.product_id
+JOIN BRANCH b ON i.branch_id = b.branch_id
+WHERE i.quantity <= i.minimum_stock;

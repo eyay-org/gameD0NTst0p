@@ -59,12 +59,15 @@ def get_products():
         genre = request.args.get('genre')
         platform = request.args.get('platform')
         search = request.args.get('search')
+        min_price = request.args.get('min_price', type=float)
+        max_price = request.args.get('max_price', type=float)
+        sort_by = request.args.get('sort_by', 'newest')  # newest, price_asc, price_desc, name_asc
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
         # Build query
         query = """
-            SELECT 
+            SELECT DISTINCT
                 p.product_id,
                 p.product_name,
                 p.description,
@@ -76,19 +79,57 @@ def get_products():
                 pm.media_url as main_image
             FROM PRODUCT p
             LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
-            WHERE 1=1
         """
+        
+        # Add joins for filtering
+        if genre:
+            query += """
+                JOIN GAME_GENRE gg ON p.product_id = gg.product_id
+                JOIN GENRE g ON gg.genre_id = g.genre_id
+            """
+            
+        if platform:
+            query += " JOIN GAME gm ON p.product_id = gm.product_id "
+            
+        query += " WHERE 1=1"
         params = []
         
+        # Apply filters
         if product_type:
             query += " AND p.product_type = %s"
             params.append(product_type)
+            
+        if genre:
+            query += " AND g.genre_name = %s"
+            params.append(genre)
+            
+        if platform:
+            query += " AND gm.platform = %s"
+            params.append(platform)
         
         if search:
-            query += " AND (p.product_name LIKE %s OR p.description LIKE %s)"
-            params.extend([f'%{search}%', f'%{search}%'])
+            query += " AND p.product_name LIKE %s"
+            params.append(f'%{search}%')
+            
+        if min_price is not None:
+            query += " AND p.price >= %s"
+            params.append(min_price)
+            
+        if max_price is not None:
+            query += " AND p.price <= %s"
+            params.append(max_price)
         
-        query += " ORDER BY p.product_id DESC LIMIT %s OFFSET %s"
+        # Apply sorting
+        if sort_by == 'price_asc':
+            query += " ORDER BY p.price ASC"
+        elif sort_by == 'price_desc':
+            query += " ORDER BY p.price DESC"
+        elif sort_by == 'name_asc':
+            query += " ORDER BY p.product_name ASC"
+        else:  # newest (default)
+            query += " ORDER BY p.release_date DESC"
+            
+        query += " LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         
         cursor.execute(query, params)

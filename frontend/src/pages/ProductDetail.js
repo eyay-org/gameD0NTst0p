@@ -35,7 +35,6 @@ const ProductDetail = () => {
     };
 
     loadProduct();
-    loadProduct();
   }, [productId, navigate]);
 
   useEffect(() => {
@@ -258,6 +257,12 @@ const ProductDetail = () => {
 
             {product.product_type === 'game' && (
               <div className="product-specs">
+                {product.release_date && (
+                  <div className="spec-item">
+                    <span className="spec-label">RELEASE DATE:</span>
+                    <span className="spec-value">{new Date(product.release_date).toLocaleDateString()}</span>
+                  </div>
+                )}
                 {product.platform && (
                   <div className="spec-item">
                     <span className="spec-label">PLATFORM:</span>
