@@ -58,6 +58,9 @@ const apiService = {
   getAdminInventory: (params = {}) => api.get('/admin/inventory', { params }),
   getAdminOrders: (params = {}) => api.get('/admin/orders', { params }),
   getAdminStockLogs: (limit = 50) => api.get('/admin/stock-logs', { params: { limit } }),
+  getAdminAnalytics: () => api.get('/admin/analytics'),
+  getSuppliers: () => api.get('/admin/suppliers'),
+  restockInventory: (data) => api.post('/admin/restock', data),
 };
 
 export default apiService;

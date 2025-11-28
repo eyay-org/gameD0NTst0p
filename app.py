@@ -1115,6 +1115,185 @@ def check_review_eligibility(product_id, customer_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================================
+# ANALYTICS ENDPOINTS
+# ============================================================================
+
+@app.route('/api/admin/analytics', methods=['GET'])
+def get_admin_analytics():
+    """Get sales analytics data"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # 1. Total Metrics
+        cursor.execute("""
+            SELECT 
+                COALESCE(SUM(transaction_amount), 0) as total_revenue,
+                COALESCE(SUM(profit), 0) as total_profit,
+                COUNT(*) as total_transactions
+            FROM SALE
+        """)
+        totals = cursor.fetchone()
+        
+        # Calculate Expenses (Total Cost of Purchases)
+        cursor.execute("SELECT COALESCE(SUM(total_cost), 0) as total_expenses FROM PURCHASE")
+        total_expenses = cursor.fetchone()['total_expenses']
+        
+        totals['total_expenses'] = float(total_expenses)
+        totals['net_income'] = float(totals['total_revenue']) - float(total_expenses)
+        
+        # 2. Performance by Branch
+        cursor.execute("""
+            SELECT 
+                b.branch_name,
+                COUNT(s.sale_id) as transaction_count,
+                COALESCE(SUM(s.transaction_amount), 0) as revenue,
+                COALESCE(SUM(s.profit), 0) as profit
+            FROM BRANCH b
+            LEFT JOIN SALE s ON b.branch_id = s.branch_id
+            GROUP BY b.branch_id, b.branch_name
+            ORDER BY revenue DESC
+        """)
+        branch_performance = cursor.fetchall()
+        
+        # 3. Top Selling Products (by quantity sold)
+        # We join ORDER_DETAIL -> PRODUCT to get names and counts
+        # Note: This counts items from all orders, not just those in SALE table (which mirrors orders)
+        cursor.execute("""
+            SELECT 
+                p.product_name,
+                SUM(od.quantity) as total_sold,
+                SUM(od.quantity * od.unit_price) as revenue
+            FROM ORDER_DETAIL od
+            JOIN PRODUCT p ON od.product_id = p.product_id
+            JOIN `ORDER` o ON od.order_id = o.order_id
+            WHERE o.order_status != 'cancelled'
+            GROUP BY p.product_id, p.product_name
+            ORDER BY total_sold DESC
+            LIMIT 5
+        """)
+        top_products = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({
+            'totals': totals,
+            'branch_performance': branch_performance,
+            'top_products': top_products
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+# ============================================================================
+# SUPPLIER & RESTOCK ENDPOINTS
+# ============================================================================
+
+@app.route('/api/admin/suppliers', methods=['GET'])
+def get_suppliers():
+    """Get all suppliers"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("SELECT supplier_id, supplier_name FROM SUPPLIER WHERE active_status = TRUE ORDER BY supplier_name")
+        suppliers = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(suppliers), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/restock', methods=['POST'])
+def restock_inventory():
+    """Restock inventory (Purchase from Supplier)"""
+    try:
+        data = request.json
+        product_id = data.get('product_id')
+        branch_id = data.get('branch_id')
+        supplier_id = data.get('supplier_id')
+        quantity = int(data.get('quantity', 0))
+        unit_cost = float(data.get('unit_cost', 0))
+        
+        if not all([product_id, branch_id, supplier_id, quantity > 0, unit_cost >= 0]):
+            return jsonify({'error': 'Invalid input parameters'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cnx.start_transaction()
+        cursor = cnx.cursor()
+        
+        try:
+            # 1. Record Purchase
+            cursor.execute("""
+                INSERT INTO PURCHASE (supplier_id, product_id, quantity, unit_cost, total_cost, payment_status, transaction_date)
+                VALUES (%s, %s, %s, %s, %s, 'pending', NOW())
+            """, (supplier_id, product_id, quantity, unit_cost, quantity * unit_cost))
+            
+            # 2. Update Inventory
+            # Check if inventory record exists
+            cursor.execute("""
+                SELECT quantity FROM INVENTORY 
+                WHERE product_id = %s AND branch_id = %s
+            """, (product_id, branch_id))
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                cursor.execute("""
+                    UPDATE INVENTORY 
+                    SET quantity = quantity + %s 
+                    WHERE product_id = %s AND branch_id = %s
+                """, (quantity, product_id, branch_id))
+            else:
+                # If product not in this branch yet, insert it
+                cursor.execute("""
+                    INSERT INTO INVENTORY (product_id, branch_id, quantity)
+                    VALUES (%s, %s, %s)
+                """, (product_id, branch_id, quantity))
+            
+            cnx.commit()
+            
+            # Get new quantity for response
+            cursor.execute("""
+                SELECT quantity FROM INVENTORY 
+                WHERE product_id = %s AND branch_id = %s
+            """, (product_id, branch_id))
+            new_quantity = cursor.fetchone()[0]
+            
+            return jsonify({
+                'message': 'Restock successful',
+                'new_quantity': new_quantity
+            }), 200
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'cnx' in locals() and cnx.is_connected():
+            cnx.close()
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
 

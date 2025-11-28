@@ -96,6 +96,58 @@ const InventoryManager = () => {
 
 
 
+    const [showRestockModal, setShowRestockModal] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [suppliers, setSuppliers] = useState([]);
+    const [restockForm, setRestockForm] = useState({
+        supplierId: '',
+        quantity: 10,
+        unitCost: 0
+    });
+
+    const handleOpenRestock = async (item) => {
+        setSelectedItem(item);
+        setRestockForm({ supplierId: '', quantity: 10, unitCost: 0 });
+        setShowRestockModal(true);
+
+        try {
+            const supplierList = await api.getSuppliers();
+            setSuppliers(supplierList);
+            if (supplierList.length > 0) {
+                setRestockForm(prev => ({ ...prev, supplierId: supplierList[0].supplier_id }));
+            }
+        } catch (error) {
+            console.error('Failed to load suppliers:', error);
+            alert('Failed to load suppliers. Please try again.');
+        }
+    };
+
+    const handleRestockSubmit = async (e) => {
+        e.preventDefault();
+        if (!restockForm.supplierId || restockForm.quantity <= 0 || restockForm.unitCost < 0) {
+            alert('Please fill in all fields correctly.');
+            return;
+        }
+
+        try {
+            await api.restockInventory({
+                product_id: selectedItem.product_id,
+                branch_id: selectedItem.branch_id || 1, // Default to branch 1 if missing, but should be there
+                supplier_id: restockForm.supplierId,
+                quantity: restockForm.quantity,
+                unit_cost: restockForm.unitCost
+            });
+
+            alert('Restock successful!');
+            setShowRestockModal(false);
+            fetchInventory(); // Refresh table
+            fetchStockLogs(); // Refresh logs if open
+        } catch (error) {
+            console.error('Restock failed:', error);
+            alert('Restock failed: ' + error.message);
+        }
+    };
+
     if (loading && !inventory.length) return <div className="loading">LOADING...</div>;
 
     return (
@@ -109,6 +161,67 @@ const InventoryManager = () => {
                     VIEW HISTORY (LOGS)
                 </button>
             </div>
+
+            {/* Restock Modal */}
+            {showRestockModal && (
+                <div className="modal-overlay" onClick={() => setShowRestockModal(false)} style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex',
+                    justifyContent: 'center', alignItems: 'center', zIndex: 1000,
+                    backdropFilter: 'blur(2px)'
+                }}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{
+                        background: '#2a2a3e', border: '4px solid #4a90e2', padding: '20px',
+                        width: '400px', boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)'
+                    }}>
+                        <h2 style={{ color: '#4a90e2', marginBottom: '20px' }}>RESTOCK: {selectedItem?.product_name}</h2>
+                        <form onSubmit={handleRestockSubmit}>
+                            <div style={{ marginBottom: '15px' }}>
+                                <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Supplier:</label>
+                                <select
+                                    value={restockForm.supplierId}
+                                    onChange={e => setRestockForm({ ...restockForm, supplierId: e.target.value })}
+                                    style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                >
+                                    <option value="">Select Supplier</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div style={{ marginBottom: '15px' }}>
+                                <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Quantity:</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={restockForm.quantity}
+                                    onChange={e => setRestockForm({ ...restockForm, quantity: parseInt(e.target.value) })}
+                                    style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                />
+                            </div>
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Unit Cost ($):</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={restockForm.unitCost}
+                                    onChange={e => setRestockForm({ ...restockForm, unitCost: parseFloat(e.target.value) })}
+                                    style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                                <button type="button" onClick={() => setShowRestockModal(false)} style={{
+                                    padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer'
+                                }}>CANCEL</button>
+                                <button type="submit" style={{
+                                    padding: '8px 16px', background: '#4ade80', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 'bold'
+                                }}>CONFIRM RESTOCK</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {showHistory && (
                 <div className="modal-overlay" onClick={() => setShowHistory(false)} style={{
@@ -215,6 +328,7 @@ const InventoryManager = () => {
                             <th onClick={() => handleSort('last_update')} style={{ cursor: 'pointer' }}>
                                 LAST UPDATE {getSortIcon('last_update')}
                             </th>
+                            <th>ACTION</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -229,6 +343,17 @@ const InventoryManager = () => {
                                 <td>{item.branch_name}</td>
                                 <td>{item.quantity}</td>
                                 <td>{new Date(item.last_update_date).toLocaleDateString()}</td>
+                                <td>
+                                    <button
+                                        onClick={() => handleOpenRestock(item)}
+                                        style={{
+                                            background: '#4ade80', color: '#000', border: 'none',
+                                            padding: '4px 8px', cursor: 'pointer', fontWeight: 'bold'
+                                        }}
+                                    >
+                                        + RESTOCK
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
