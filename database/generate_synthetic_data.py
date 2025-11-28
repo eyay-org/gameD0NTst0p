@@ -746,6 +746,13 @@ def load_returns(cnx, cursor, customer_ids, order_ids, product_ids):
                     refund_date.date() if refund_date else None,
                 ),
             )
+            
+            # Update order status to 'returned'
+            cursor.execute(
+                "UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s",
+                (order_id,)
+            )
+            
             return_count += 1
         except mysql.connector.Error as e:
             print(f"  [X] Error inserting return {i+1}: {e}")

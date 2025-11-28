@@ -61,6 +61,9 @@ const apiService = {
   getAdminAnalytics: () => api.get('/admin/analytics'),
   getSuppliers: () => api.get('/admin/suppliers'),
   restockInventory: (data) => api.post('/admin/restock', data),
+  getBranches: () => api.get('/admin/branches'),
+  recordOfflineSale: (data) => api.post('/admin/sales/offline', data),
+  getAdminReturns: () => api.get('/admin/returns'),
 };
 
 export default apiService;

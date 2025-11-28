@@ -25,8 +25,14 @@ const AdminLayout = () => {
                     <Link to="/admin/orders" className={`sidebar-link ${isActive('/admin/orders')}`}>
                         🛒 ORDERS
                     </Link>
+                    <Link to="/admin/returns" className={`sidebar-link ${isActive('/admin/returns')}`}>
+                        ↩️ RETURNS
+                    </Link>
                     <Link to="/admin/analytics" className={`sidebar-link ${isActive('/admin/analytics')}`}>
                         📈 ANALYTICS
+                    </Link>
+                    <Link to="/admin/branches" className={`sidebar-link ${isActive('/admin/branches')}`}>
+                        🏢 BRANCHES
                     </Link>
                 </nav>
             </aside>

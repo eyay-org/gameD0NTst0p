@@ -15,6 +15,17 @@ const InventoryManager = () => {
         direction: 'asc'
     });
 
+    const [showRestockModal, setShowRestockModal] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [suppliers, setSuppliers] = useState([]);
+    const [branches, setBranches] = useState([]); // New state for branches
+    const [selectedBranch, setSelectedBranch] = useState(''); // New state for filter
+    const [restockForm, setRestockForm] = useState({
+        supplierId: '',
+        quantity: 10,
+        unitCost: 0
+    });
+
     const fetchInventory = useCallback(async () => {
         setLoading(true);
         try {
@@ -22,7 +33,8 @@ const InventoryManager = () => {
                 page: pagination.page,
                 limit: pagination.limit,
                 sort_by: sortConfig.key,
-                order: sortConfig.direction
+                order: sortConfig.direction,
+                branch_id: selectedBranch // Pass branch_id to backend
             };
             const response = await api.getAdminInventory(params);
             setInventory(response.data);
@@ -36,7 +48,7 @@ const InventoryManager = () => {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, sortConfig.key, sortConfig.direction]);
+    }, [pagination.page, pagination.limit, sortConfig.key, sortConfig.direction, selectedBranch]); // Add selectedBranch dependency
 
     useEffect(() => {
         fetchInventory();
@@ -96,14 +108,25 @@ const InventoryManager = () => {
 
 
 
-    const [showRestockModal, setShowRestockModal] = useState(false);
-    const [selectedItem, setSelectedItem] = useState(null);
-    const [suppliers, setSuppliers] = useState([]);
-    const [restockForm, setRestockForm] = useState({
-        supplierId: '',
-        quantity: 10,
-        unitCost: 0
-    });
+    // Fetch branches on mount
+    useEffect(() => {
+        const fetchBranches = async () => {
+            try {
+                const data = await api.getBranches();
+                setBranches(data);
+            } catch (error) {
+                console.error('Failed to load branches:', error);
+            }
+        };
+        fetchBranches();
+    }, []);
+
+    // Filter inventory based on selected branch
+    // const filteredInventory = selectedBranch 
+    //     ? inventory.filter(item => item.branch_id == selectedBranch)
+    //     : inventory;
+    // Backend filtering is now used, so we use 'inventory' directly
+    const filteredInventory = inventory;
 
     const handleOpenRestock = async (item) => {
         setSelectedItem(item);
@@ -154,12 +177,25 @@ const InventoryManager = () => {
         <div className="admin-page">
             <div className="admin-page-header">
                 <h1 className="admin-title">INVENTORY MANAGEMENT</h1>
-                <button
-                    className="pixel-button"
-                    onClick={fetchStockLogs}
-                >
-                    VIEW HISTORY (LOGS)
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <select
+                        value={selectedBranch}
+                        onChange={(e) => setSelectedBranch(e.target.value)}
+                        className="pixel-input"
+                        style={{ padding: '8px', background: '#1a1a2e', color: '#fff', border: '2px solid #4a90e2' }}
+                    >
+                        <option value="">ALL BRANCHES</option>
+                        {branches.map(b => (
+                            <option key={b.branch_id} value={b.branch_id}>{b.branch_name}</option>
+                        ))}
+                    </select>
+                    <button
+                        className="pixel-button"
+                        onClick={fetchStockLogs}
+                    >
+                        VIEW HISTORY (LOGS)
+                    </button>
+                </div>
             </div>
 
             {/* Restock Modal */}
@@ -332,7 +368,7 @@ const InventoryManager = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {inventory.map((item) => (
+                        {filteredInventory.map((item) => (
                             <tr key={`${item.product_id}-${item.branch_name}`} className={item.quantity <= item.stock_alert_level ? 'low-stock' : ''}>
                                 <td>
                                     {item.product_name}

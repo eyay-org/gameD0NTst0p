@@ -15,6 +15,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import InventoryManager from './pages/admin/InventoryManager';
 import OrderManager from './pages/admin/OrderManager';
 import Analytics from './pages/admin/Analytics';
+import Branches from './pages/admin/Branches';
+import Returns from './pages/admin/Returns';
 import './App.css';
 
 function App() {
@@ -39,7 +41,9 @@ function App() {
                 <Route index element={<AdminDashboard />} />
                 <Route path="inventory" element={<InventoryManager />} />
                 <Route path="orders" element={<OrderManager />} />
+                <Route path="returns" element={<Returns />} />
                 <Route path="analytics" element={<Analytics />} />
+                <Route path="branches" element={<Branches />} />
               </Route>
             </Routes>
           </main>

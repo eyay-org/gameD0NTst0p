@@ -542,6 +542,7 @@ def get_admin_inventory():
         limit = request.args.get('limit', 20, type=int)
         sort_by = request.args.get('sort_by', 'product_name')
         order = request.args.get('order', 'asc')
+        branch_id = request.args.get('branch_id') # New Filter
         
         offset = (page - 1) * limit
         
@@ -556,8 +557,17 @@ def get_admin_inventory():
         sort_column = sort_mapping.get(sort_by, 'p.product_name')
         sort_direction = 'DESC' if order == 'desc' else 'ASC'
         
+        # Base Query Construction
+        where_clause = ""
+        params = []
+        
+        if branch_id:
+            where_clause = "WHERE i.branch_id = %s"
+            params.append(branch_id)
+            
         # Count Query
-        cursor.execute("SELECT COUNT(*) as total FROM INVENTORY")
+        count_query = f"SELECT COUNT(*) as total FROM INVENTORY i {where_clause}"
+        cursor.execute(count_query, tuple(params))
         total_count = cursor.fetchone()['total']
         total_pages = math.ceil(total_count / limit)
         
@@ -567,17 +577,22 @@ def get_admin_inventory():
                 p.product_id,
                 p.product_name,
                 p.stock_alert_level,
+                b.branch_id,
                 b.branch_name,
                 i.quantity,
                 i.last_update_date
             FROM INVENTORY i
             JOIN PRODUCT p ON i.product_id = p.product_id
             JOIN BRANCH b ON i.branch_id = b.branch_id
+            {where_clause}
             ORDER BY {sort_column} {sort_direction}
             LIMIT %s OFFSET %s
         """
         
-        cursor.execute(query, (limit, offset))
+        # Add pagination params to params list
+        data_params = params + [limit, offset]
+        
+        cursor.execute(query, tuple(data_params))
         inventory = cursor.fetchall()
         
         cursor.close()
@@ -592,6 +607,94 @@ def get_admin_inventory():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ... (Rest of the file)
+
+@app.route('/api/admin/sales/offline', methods=['POST'])
+def record_offline_sale():
+    """Record an in-store (offline) sale"""
+    try:
+        data = request.json
+        product_id = data.get('product_id')
+        branch_id = data.get('branch_id')
+        quantity = int(data.get('quantity', 0))
+        
+        if not all([product_id, branch_id, quantity > 0]):
+            return jsonify({'error': 'Invalid input parameters'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cnx.start_transaction()
+        cursor = cnx.cursor()
+        
+        try:
+            # 1. Check Inventory
+            cursor.execute("""
+                SELECT quantity FROM INVENTORY 
+                WHERE product_id = %s AND branch_id = %s
+            """, (product_id, branch_id))
+            
+            inventory = cursor.fetchone()
+            
+            if not inventory or inventory[0] < quantity:
+                return jsonify({'error': 'Insufficient stock'}), 400
+            
+            # 2. Get Product Price
+            cursor.execute("SELECT price FROM PRODUCT WHERE product_id = %s", (product_id,))
+            product_price = cursor.fetchone()[0]
+            transaction_amount = float(product_price) * quantity
+            
+            # 3. Get Random Customer (for visibility in Orders list)
+            cursor.execute("SELECT customer_id FROM CUSTOMER ORDER BY RAND() LIMIT 1")
+            customer_result = cursor.fetchone()
+            customer_id = customer_result[0] if customer_result else None
+            
+            # 4. Create Order Record (The Anchor)
+            cursor.execute("""
+                INSERT INTO `ORDER` (customer_id, order_date, total_amount, order_status, payment_status, delivery_full_address)
+                VALUES (%s, NOW(), %s, 'delivered', 'paid', 'In-Store Pickup')
+            """, (customer_id, transaction_amount))
+            
+            order_id = cursor.lastrowid
+            
+            # 4. Create Order Details
+            cursor.execute("""
+                INSERT INTO ORDER_DETAIL (order_id, line_no, product_id, quantity, unit_price)
+                VALUES (%s, 1, %s, %s, %s)
+            """, (order_id, product_id, quantity, product_price))
+            
+            # 5. Update Inventory
+            cursor.execute("""
+                UPDATE INVENTORY 
+                SET quantity = quantity - %s 
+                WHERE product_id = %s AND branch_id = %s
+            """, (quantity, product_id, branch_id))
+            
+            # 6. Record Sale (Financial Record)
+            estimated_profit = transaction_amount * 0.3 
+            
+            cursor.execute("""
+                INSERT INTO SALE (branch_id, order_id, sale_date, transaction_amount, profit, sale_type)
+                VALUES (%s, %s, NOW(), %s, %s, 'in-store')
+            """, (branch_id, order_id, transaction_amount, estimated_profit))
+            
+            cnx.commit()
+            
+            return jsonify({'message': 'In-store sale recorded successfully', 'order_id': order_id}), 200
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'cnx' in locals() and cnx.is_connected():
+            cnx.close()
 
 
 @app.route('/api/admin/orders', methods=['GET'])
@@ -869,10 +972,7 @@ def create_order():
                     WHERE inventory_id = %s
                 """, (quantity, stock_info[0]))
 
-            # Generate Tracking Number
-            tracking_number = 'TR' + ''.join(random.choices(string.digits, k=9))
-
-            # 3. Create Order
+            # 3. Create Order (Tracking Number is NULL initially)
             cursor.execute("""
                 INSERT INTO `ORDER` (
                     customer_id, order_status, total_amount, shipping_fee,
@@ -889,7 +989,7 @@ def create_order():
                 data.get('shipping_fee', 0),
                 data.get('payment_method', 'credit_card'),
                 'pending',
-                tracking_number,
+                None, # Tracking number generated only when shipped
                 data.get('delivery_address', ''),
                 data.get('delivery_city', ''),
                 data.get('billing_address', ''),
@@ -1058,7 +1158,7 @@ def create_review():
 
 @app.route('/api/orders/<int:order_id>/status', methods=['PUT'])
 def update_order_status(order_id):
-    """Update order status"""
+    """Update order status with side effects"""
     try:
         data = request.json
         new_status = data.get('status')
@@ -1070,15 +1170,103 @@ def update_order_status(order_id):
         if not cnx:
             return jsonify({'error': 'Database connection failed'}), 500
         
-        cursor = cnx.cursor()
-        cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
+        cnx.start_transaction()
+        cursor = cnx.cursor(dictionary=True)
         
-        cnx.commit()
-        cursor.close()
-        cnx.close()
-        
-        return jsonify({'message': 'Order status updated'}), 200
-        
+        try:
+            # Get current order info
+            cursor.execute("SELECT order_status, tracking_number, customer_id FROM `ORDER` WHERE order_id = %s", (order_id,))
+            current_order = cursor.fetchone()
+            
+            if not current_order:
+                return jsonify({'error': 'Order not found'}), 404
+                
+            # 1. Handle SHIPPED: Generate Tracking Number
+            if new_status == 'shipped' and not current_order['tracking_number']:
+                tracking_number = 'TR' + ''.join(random.choices(string.digits, k=9))
+                cursor.execute("""
+                    UPDATE `ORDER` 
+                    SET order_status = %s, tracking_number = %s 
+                    WHERE order_id = %s
+                """, (new_status, tracking_number, order_id))
+                
+            # 2. Handle DELIVERED: Set Delivery Date
+            elif new_status == 'delivered':
+                cursor.execute("""
+                    UPDATE `ORDER` 
+                    SET order_status = %s, actual_delivery_date = NOW() 
+                    WHERE order_id = %s
+                """, (new_status, order_id))
+                
+            # 3. Handle CANCELLED/RETURNED: Restore Inventory
+            elif new_status in ['cancelled', 'returned'] and current_order['order_status'] not in ['cancelled', 'returned']:
+                # Get order items
+                cursor.execute("SELECT product_id, quantity, unit_price FROM ORDER_DETAIL WHERE order_id = %s", (order_id,))
+                items = cursor.fetchall()
+                
+                # Get branches associated with this order from SALE table
+                cursor.execute("SELECT DISTINCT branch_id FROM SALE WHERE order_id = %s", (order_id,))
+                sale_branches = [row['branch_id'] for row in cursor.fetchall()]
+                
+                for item in items:
+                    target_branch_id = None
+                    
+                    # 1. Try to restore to a branch involved in the sale
+                    if sale_branches:
+                        format_strings = ','.join(['%s'] * len(sale_branches))
+                        query = f"SELECT branch_id FROM INVENTORY WHERE product_id = %s AND branch_id IN ({format_strings}) LIMIT 1"
+                        cursor.execute(query, (item['product_id'], *sale_branches))
+                        result = cursor.fetchone()
+                        if result:
+                            target_branch_id = result['branch_id']
+                    
+                    # 2. Fallback: Find any branch with this product
+                    if not target_branch_id:
+                        cursor.execute("SELECT branch_id FROM INVENTORY WHERE product_id = %s LIMIT 1", (item['product_id'],))
+                        result = cursor.fetchone()
+                        if result:
+                            target_branch_id = result['branch_id']
+                            
+                    # 3. Update Inventory
+                    if target_branch_id:
+                        cursor.execute("""
+                            UPDATE INVENTORY 
+                            SET quantity = quantity + %s 
+                            WHERE product_id = %s AND branch_id = %s
+                        """, (item['quantity'], item['product_id'], target_branch_id))
+
+                # 4. Handle RETURN specific logic: Insert into RETURN table
+                if new_status == 'returned':
+                    for item in items:
+                        refund_amount = item['quantity'] * item['unit_price']
+                        cursor.execute("""
+                            INSERT INTO `RETURN` 
+                            (customer_id, order_id, product_id, transaction_date, quantity, 
+                             refund_amount, return_reason, return_status, refund_date)
+                            VALUES (%s, %s, %s, NOW(), %s, %s, %s, %s, NOW())
+                        """, (
+                            current_order['customer_id'],
+                            order_id,
+                            item['product_id'],
+                            item['quantity'],
+                            refund_amount,
+                            "Admin processed return",
+                            "completed"
+                        ))
+                
+                cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
+                
+            else:
+                # Just update status
+                cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
+            
+            cnx.commit()
+            return jsonify({'message': 'Order status updated'}), 200
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1115,6 +1303,46 @@ def check_review_eligibility(product_id, customer_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/admin/returns', methods=['GET'])
+def get_admin_returns():
+    """Get all returns"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                r.return_id,
+                r.order_id,
+                r.customer_id,
+                c.email as customer_email,
+                r.product_id,
+                p.product_name,
+                r.return_reason,
+                r.refund_amount,
+                r.return_status,
+                r.refund_date
+            FROM `RETURN` r
+            JOIN CUSTOMER c ON r.customer_id = c.customer_id
+            JOIN PRODUCT p ON r.product_id = p.product_id
+            ORDER BY r.refund_date DESC
+        """
+        
+        cursor.execute(query)
+        returns = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(returns), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # ANALYTICS ENDPOINTS
 # ============================================================================
@@ -1132,10 +1360,12 @@ def get_admin_analytics():
         # 1. Total Metrics
         cursor.execute("""
             SELECT 
-                COALESCE(SUM(transaction_amount), 0) as total_revenue,
-                COALESCE(SUM(profit), 0) as total_profit,
-                COUNT(*) as total_transactions
-            FROM SALE
+                COALESCE(SUM(s.transaction_amount), 0) as total_revenue,
+                COALESCE(SUM(s.profit), 0) as total_profit,
+                COUNT(s.sale_id) as total_transactions
+            FROM SALE s
+            JOIN `ORDER` o ON s.order_id = o.order_id
+            WHERE o.order_status NOT IN ('cancelled', 'returned')
         """)
         totals = cursor.fetchone()
         
@@ -1155,6 +1385,8 @@ def get_admin_analytics():
                 COALESCE(SUM(s.profit), 0) as profit
             FROM BRANCH b
             LEFT JOIN SALE s ON b.branch_id = s.branch_id
+            LEFT JOIN `ORDER` o ON s.order_id = o.order_id
+            WHERE o.order_status IS NULL OR o.order_status NOT IN ('cancelled', 'returned')
             GROUP BY b.branch_id, b.branch_name
             ORDER BY revenue DESC
         """)
@@ -1171,7 +1403,7 @@ def get_admin_analytics():
             FROM ORDER_DETAIL od
             JOIN PRODUCT p ON od.product_id = p.product_id
             JOIN `ORDER` o ON od.order_id = o.order_id
-            WHERE o.order_status != 'cancelled'
+            WHERE o.order_status NOT IN ('cancelled', 'returned')
             GROUP BY p.product_id, p.product_name
             ORDER BY total_sold DESC
             LIMIT 5
@@ -1292,6 +1524,31 @@ def restock_inventory():
             cursor.close()
         if 'cnx' in locals() and cnx.is_connected():
             cnx.close()
+
+
+
+@app.route('/api/admin/branches', methods=['GET'])
+def get_branches():
+    """Get all branches"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM BRANCH ORDER BY branch_name")
+        branches = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(branches), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
 
 
 if __name__ == '__main__':
