@@ -1073,11 +1073,13 @@ def get_orders(customer_id):
                 od.quantity,
                 od.unit_price,
                 p.product_name,
-                pm.media_url as image_url
+                pm.media_url as image_url,
+                r.return_status as item_return_status
             FROM `ORDER` o
             JOIN ORDER_DETAIL od ON o.order_id = od.order_id
             JOIN PRODUCT p ON od.product_id = p.product_id
             LEFT JOIN PRODUCT_MEDIA pm ON p.product_id = pm.product_id AND pm.main_image = TRUE
+            LEFT JOIN `RETURN` r ON od.order_id = r.order_id AND od.product_id = r.product_id
             WHERE o.customer_id = %s
             ORDER BY o.order_date DESC
         """
@@ -1105,7 +1107,8 @@ def get_orders(customer_id):
                 'product_name': row['product_name'],
                 'quantity': row['quantity'],
                 'unit_price': float(row['unit_price']),
-                'image_url': row['image_url']
+                'image_url': row['image_url'],
+                'return_status': row['item_return_status']
             })
         
         # Convert map to list and sort by date (descending)
@@ -1235,24 +1238,35 @@ def update_order_status(order_id):
                             WHERE product_id = %s AND branch_id = %s
                         """, (item['quantity'], item['product_id'], target_branch_id))
 
-                # 4. Handle RETURN specific logic: Insert into RETURN table
+                # 4. Handle RETURN specific logic
                 if new_status == 'returned':
-                    for item in items:
-                        refund_amount = item['quantity'] * item['unit_price']
+                    # Check if return records already exist (e.g. pending user request)
+                    cursor.execute("SELECT 1 FROM `RETURN` WHERE order_id = %s LIMIT 1", (order_id,))
+                    if cursor.fetchone():
+                        # Update existing records to completed
                         cursor.execute("""
-                            INSERT INTO `RETURN` 
-                            (customer_id, order_id, product_id, transaction_date, quantity, 
-                             refund_amount, return_reason, return_status, refund_date)
-                            VALUES (%s, %s, %s, NOW(), %s, %s, %s, %s, NOW())
-                        """, (
-                            current_order['customer_id'],
-                            order_id,
-                            item['product_id'],
-                            item['quantity'],
-                            refund_amount,
-                            "Admin processed return",
-                            "completed"
-                        ))
+                            UPDATE `RETURN` 
+                            SET return_status = 'completed', refund_date = NOW() 
+                            WHERE order_id = %s
+                        """, (order_id,))
+                    else:
+                        # Insert new records if none exist
+                        for item in items:
+                            refund_amount = item['quantity'] * item['unit_price']
+                            cursor.execute("""
+                                INSERT INTO `RETURN` 
+                                (customer_id, order_id, product_id, transaction_date, quantity, 
+                                 refund_amount, return_reason, return_status, refund_date)
+                                VALUES (%s, %s, %s, NOW(), %s, %s, %s, %s, NOW())
+                            """, (
+                                current_order['customer_id'],
+                                order_id,
+                                item['product_id'],
+                                item['quantity'],
+                                refund_amount,
+                                "Admin processed return",
+                                "completed"
+                            ))
                 
                 cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
                 
@@ -1344,8 +1358,157 @@ def get_admin_returns():
 
 
 # ============================================================================
-# ANALYTICS ENDPOINTS
+# RETURN MANAGEMENT ENDPOINTS
 # ============================================================================
+
+@app.route('/api/returns/request', methods=['POST'])
+def request_return():
+    """User requests a return for the entire order"""
+    try:
+        data = request.json
+        order_id = data.get('order_id')
+        reason = data.get('reason')
+        
+        if not all([order_id, reason]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cnx.start_transaction()
+        cursor = cnx.cursor(dictionary=True)
+        
+        try:
+            # Check for existing return
+            cursor.execute("SELECT 1 FROM `RETURN` WHERE order_id = %s LIMIT 1", (order_id,))
+            if cursor.fetchone():
+                return jsonify({'error': 'Return request already pending or processed'}), 400
+
+            # Get all items in the order
+            cursor.execute("""
+                SELECT product_id, quantity, unit_price, customer_id 
+                FROM ORDER_DETAIL od
+                JOIN `ORDER` o ON od.order_id = o.order_id
+                WHERE od.order_id = %s
+            """, (order_id,))
+            
+            items = cursor.fetchall()
+            if not items:
+                return jsonify({'error': 'Order not found or empty'}), 404
+                
+            # Insert Return Record for EACH item
+            for item in items:
+                refund_amount = item['quantity'] * item['unit_price']
+                
+                cursor.execute("""
+                    INSERT INTO `RETURN` 
+                    (customer_id, order_id, product_id, transaction_date, quantity, 
+                     refund_amount, return_reason, return_status)
+                    VALUES (%s, %s, %s, NOW(), %s, %s, %s, 'pending')
+                """, (
+                    item['customer_id'],
+                    order_id,
+                    item['product_id'],
+                    item['quantity'],
+                    refund_amount,
+                    reason
+                ))
+            
+            cnx.commit()
+            return jsonify({'message': 'Return requested for entire order'}), 201
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/returns/<int:return_id>/status', methods=['PUT'])
+def update_return_status(return_id):
+    """Admin updates return status"""
+    try:
+        data = request.json
+        new_status = data.get('status')
+        
+        if new_status not in ['approved', 'rejected', 'completed']:
+            return jsonify({'error': 'Invalid status'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cnx.start_transaction()
+        cursor = cnx.cursor(dictionary=True)
+        
+        try:
+            # Update status
+            update_query = "UPDATE `RETURN` SET return_status = %s"
+            params = [new_status]
+            
+            if new_status == 'completed':
+                update_query += ", refund_date = NOW()"
+                
+            update_query += " WHERE return_id = %s"
+            params.append(return_id)
+            
+            cursor.execute(update_query, tuple(params))
+            
+            # If Completed: Restore Inventory and Update Order Status
+            if new_status == 'completed':
+                # Get return details
+                cursor.execute("SELECT order_id, product_id, quantity FROM `RETURN` WHERE return_id = %s", (return_id,))
+                ret = cursor.fetchone()
+                
+                # 1. Restore Inventory (Find branch from SALE or default)
+                # Try to find original branch
+                cursor.execute("SELECT branch_id FROM SALE WHERE order_id = %s LIMIT 1", (ret['order_id'],))
+                sale = cursor.fetchone()
+                
+                branch_id = sale['branch_id'] if sale else None
+                
+                if not branch_id:
+                    # Fallback: Find any branch with this product
+                    cursor.execute("SELECT branch_id FROM INVENTORY WHERE product_id = %s LIMIT 1", (ret['product_id'],))
+                    inv = cursor.fetchone()
+                    branch_id = inv['branch_id'] if inv else 1 # Default to branch 1 if all else fails
+                
+                if branch_id:
+                    cursor.execute("""
+                        UPDATE INVENTORY 
+                        SET quantity = quantity + %s 
+                        WHERE product_id = %s AND branch_id = %s
+                    """, (ret['quantity'], ret['product_id'], branch_id))
+                
+                # 2. Update Order Status (Conditional)
+                # Only set order to 'returned' if ALL return items are processed
+                cursor.execute("""
+                    SELECT COUNT(*) as remaining 
+                    FROM `RETURN` 
+                    WHERE order_id = %s AND return_status IN ('pending', 'approved')
+                """, (ret['order_id'],))
+                
+                remaining = cursor.fetchone()['remaining']
+                
+                if remaining == 0:
+                    cursor.execute("UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s", (ret['order_id'],))
+            
+            cnx.commit()
+            return jsonify({'message': f'Return status updated to {new_status}'}), 200
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'cnx' in locals() and cnx.is_connected():
+            cnx.close()
 
 @app.route('/api/admin/analytics', methods=['GET'])
 def get_admin_analytics():
@@ -1525,6 +1688,80 @@ def restock_inventory():
         if 'cnx' in locals() and cnx.is_connected():
             cnx.close()
 
+
+
+@app.route('/api/admin/inventory/transfer', methods=['POST'])
+def transfer_inventory():
+    """Transfer stock from one branch to another"""
+    try:
+        data = request.json
+        product_id = data.get('product_id')
+        from_branch_id = data.get('from_branch_id')
+        to_branch_id = data.get('to_branch_id')
+        quantity = int(data.get('quantity', 0))
+        
+        if not all([product_id, from_branch_id, to_branch_id, quantity > 0]):
+            return jsonify({'error': 'Invalid input parameters'}), 400
+            
+        if from_branch_id == to_branch_id:
+            return jsonify({'error': 'Source and destination branches must be different'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cnx.start_transaction()
+        cursor = cnx.cursor()
+        
+        try:
+            # 1. Check Source Inventory
+            cursor.execute("""
+                SELECT quantity FROM INVENTORY 
+                WHERE product_id = %s AND branch_id = %s
+            """, (product_id, from_branch_id))
+            
+            source_inv = cursor.fetchone()
+            
+            if not source_inv or source_inv[0] < quantity:
+                return jsonify({'error': 'Insufficient stock at source branch'}), 400
+                
+            # 2. Deduct from Source
+            cursor.execute("""
+                UPDATE INVENTORY 
+                SET quantity = quantity - %s 
+                WHERE product_id = %s AND branch_id = %s
+            """, (quantity, product_id, from_branch_id))
+            
+            # 3. Add to Destination
+            # Check if destination inventory record exists
+            cursor.execute("""
+                SELECT quantity FROM INVENTORY 
+                WHERE product_id = %s AND branch_id = %s
+            """, (product_id, to_branch_id))
+            
+            dest_inv = cursor.fetchone()
+            
+            if dest_inv:
+                cursor.execute("""
+                    UPDATE INVENTORY 
+                    SET quantity = quantity + %s 
+                    WHERE product_id = %s AND branch_id = %s
+                """, (quantity, product_id, to_branch_id))
+            else:
+                cursor.execute("""
+                    INSERT INTO INVENTORY (product_id, branch_id, quantity)
+                    VALUES (%s, %s, %s)
+                """, (product_id, to_branch_id, quantity))
+            
+            cnx.commit()
+            return jsonify({'message': 'Stock transfer successful'}), 200
+            
+        except Exception as e:
+            cnx.rollback()
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/admin/branches', methods=['GET'])

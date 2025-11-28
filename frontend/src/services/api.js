@@ -62,8 +62,14 @@ const apiService = {
   getSuppliers: () => api.get('/admin/suppliers'),
   restockInventory: (data) => api.post('/admin/restock', data),
   getBranches: () => api.get('/admin/branches'),
+  transferInventory: (data) => api.post('/admin/inventory/transfer', data),
   recordOfflineSale: (data) => api.post('/admin/sales/offline', data),
   getAdminReturns: () => api.get('/admin/returns'),
+  requestReturn: (orderId, reason) => api.post('/returns/request', {
+    order_id: orderId,
+    reason
+  }),
+  updateReturnStatus: (returnId, status) => api.put(`/admin/returns/${returnId}/status`, { status }),
 };
 
 export default apiService;

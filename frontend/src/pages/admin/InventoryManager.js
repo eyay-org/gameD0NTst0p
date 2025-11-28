@@ -21,10 +21,13 @@ const InventoryManager = () => {
     const [branches, setBranches] = useState([]); // New state for branches
     const [selectedBranch, setSelectedBranch] = useState(''); // New state for filter
     const [restockForm, setRestockForm] = useState({
+        mode: 'supplier', // 'supplier' or 'transfer'
         supplierId: '',
+        fromBranchId: '',
         quantity: 10,
         unitCost: 0
     });
+    const [submitting, setSubmitting] = useState(false);
 
     const fetchInventory = useCallback(async () => {
         setLoading(true);
@@ -130,7 +133,7 @@ const InventoryManager = () => {
 
     const handleOpenRestock = async (item) => {
         setSelectedItem(item);
-        setRestockForm({ supplierId: '', quantity: 10, unitCost: 0 });
+        setRestockForm({ mode: 'supplier', supplierId: '', fromBranchId: '', quantity: 10, unitCost: 0 });
         setShowRestockModal(true);
 
         try {
@@ -147,27 +150,49 @@ const InventoryManager = () => {
 
     const handleRestockSubmit = async (e) => {
         e.preventDefault();
-        if (!restockForm.supplierId || restockForm.quantity <= 0 || restockForm.unitCost < 0) {
-            alert('Please fill in all fields correctly.');
-            return;
-        }
+        setSubmitting(true);
 
         try {
-            await api.restockInventory({
-                product_id: selectedItem.product_id,
-                branch_id: selectedItem.branch_id || 1, // Default to branch 1 if missing, but should be there
-                supplier_id: restockForm.supplierId,
-                quantity: restockForm.quantity,
-                unit_cost: restockForm.unitCost
-            });
+            if (restockForm.mode === 'supplier') {
+                if (!restockForm.supplierId || restockForm.quantity <= 0 || restockForm.unitCost < 0) {
+                    alert('Please fill in all fields correctly.');
+                    setSubmitting(false);
+                    return;
+                }
 
-            alert('Restock successful!');
+                await api.restockInventory({
+                    product_id: selectedItem.product_id,
+                    branch_id: selectedItem.branch_id || 1,
+                    supplier_id: restockForm.supplierId,
+                    quantity: restockForm.quantity,
+                    unit_cost: restockForm.unitCost
+                });
+                alert('Restock successful!');
+            } else {
+                // Transfer Mode
+                if (!restockForm.fromBranchId || restockForm.quantity <= 0) {
+                    alert('Please select a source branch and valid quantity.');
+                    setSubmitting(false);
+                    return;
+                }
+
+                await api.transferInventory({
+                    product_id: selectedItem.product_id,
+                    from_branch_id: restockForm.fromBranchId,
+                    to_branch_id: selectedItem.branch_id || 1,
+                    quantity: restockForm.quantity
+                });
+                alert('Transfer successful!');
+            }
+
             setShowRestockModal(false);
             fetchInventory(); // Refresh table
             fetchStockLogs(); // Refresh logs if open
         } catch (error) {
-            console.error('Restock failed:', error);
-            alert('Restock failed: ' + error.message);
+            console.error('Operation failed:', error);
+            alert('Operation failed: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -210,21 +235,72 @@ const InventoryManager = () => {
                         background: '#2a2a3e', border: '4px solid #4a90e2', padding: '20px',
                         width: '400px', boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)'
                     }}>
-                        <h2 style={{ color: '#4a90e2', marginBottom: '20px' }}>RESTOCK: {selectedItem?.product_name}</h2>
+                        <h2 style={{ color: '#4a90e2', marginBottom: '20px' }}>
+                            {restockForm.mode === 'transfer' ? 'TRANSFER STOCK' : 'RESTOCK'}: {selectedItem?.product_name}
+                        </h2>
+
+                        {/* Mode Toggle */}
+                        <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', borderBottom: '1px solid #4a90e2', paddingBottom: '10px' }}>
+                            <label style={{ color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                <input
+                                    type="radio"
+                                    name="mode"
+                                    value="supplier"
+                                    checked={restockForm.mode === 'supplier'}
+                                    onChange={() => setRestockForm(prev => ({ ...prev, mode: 'supplier' }))}
+                                    style={{ marginRight: '8px' }}
+                                />
+                                Purchase from Supplier
+                            </label>
+                            <label style={{ color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                <input
+                                    type="radio"
+                                    name="mode"
+                                    value="transfer"
+                                    checked={restockForm.mode === 'transfer'}
+                                    onChange={() => setRestockForm(prev => ({ ...prev, mode: 'transfer' }))}
+                                    style={{ marginRight: '8px' }}
+                                />
+                                Transfer from Branch
+                            </label>
+                        </div>
+
                         <form onSubmit={handleRestockSubmit}>
-                            <div style={{ marginBottom: '15px' }}>
-                                <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Supplier:</label>
-                                <select
-                                    value={restockForm.supplierId}
-                                    onChange={e => setRestockForm({ ...restockForm, supplierId: e.target.value })}
-                                    style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
-                                >
-                                    <option value="">Select Supplier</option>
-                                    {suppliers.map(s => (
-                                        <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {restockForm.mode === 'supplier' ? (
+                                <div style={{ marginBottom: '15px' }}>
+                                    <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Supplier:</label>
+                                    <select
+                                        value={restockForm.supplierId}
+                                        onChange={e => setRestockForm({ ...restockForm, supplierId: e.target.value })}
+                                        style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                        required
+                                    >
+                                        <option value="">Select Supplier</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div style={{ marginBottom: '15px' }}>
+                                    <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Source Branch:</label>
+                                    <select
+                                        value={restockForm.fromBranchId}
+                                        onChange={e => setRestockForm({ ...restockForm, fromBranchId: e.target.value })}
+                                        style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                        required
+                                    >
+                                        <option value="">Select Source Branch</option>
+                                        {branches
+                                            .filter(b => b.branch_id !== (selectedItem?.branch_id || 1)) // Exclude current branch
+                                            .map(b => (
+                                                <option key={b.branch_id} value={b.branch_id}>{b.branch_name}</option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+                            )}
+
                             <div style={{ marginBottom: '15px' }}>
                                 <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Quantity:</label>
                                 <input
@@ -233,26 +309,39 @@ const InventoryManager = () => {
                                     value={restockForm.quantity}
                                     onChange={e => setRestockForm({ ...restockForm, quantity: parseInt(e.target.value) })}
                                     style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                    required
                                 />
                             </div>
-                            <div style={{ marginBottom: '20px' }}>
-                                <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Unit Cost ($):</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={restockForm.unitCost}
-                                    onChange={e => setRestockForm({ ...restockForm, unitCost: parseFloat(e.target.value) })}
-                                    style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
-                                />
-                            </div>
+
+                            {restockForm.mode === 'supplier' && (
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', color: '#fff', marginBottom: '5px' }}>Unit Cost ($):</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={restockForm.unitCost}
+                                        onChange={e => setRestockForm({ ...restockForm, unitCost: parseFloat(e.target.value) })}
+                                        style={{ width: '100%', padding: '8px', background: '#1a1a2e', color: '#fff', border: '1px solid #4a90e2' }}
+                                        required
+                                    />
+                                </div>
+                            )}
+
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                                 <button type="button" onClick={() => setShowRestockModal(false)} style={{
                                     padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer'
                                 }}>CANCEL</button>
-                                <button type="submit" style={{
-                                    padding: '8px 16px', background: '#4ade80', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 'bold'
-                                }}>CONFIRM RESTOCK</button>
+                                <button type="submit" disabled={submitting} style={{
+                                    padding: '8px 16px',
+                                    background: submitting ? '#666' : '#4ade80',
+                                    color: '#000',
+                                    border: 'none',
+                                    cursor: submitting ? 'not-allowed' : 'pointer',
+                                    fontWeight: 'bold'
+                                }}>
+                                    {submitting ? 'PROCESSING...' : (restockForm.mode === 'transfer' ? 'CONFIRM TRANSFER' : 'CONFIRM RESTOCK')}
+                                </button>
                             </div>
                         </form>
                     </div>

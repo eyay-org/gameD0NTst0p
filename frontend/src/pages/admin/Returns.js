@@ -39,12 +39,13 @@ const Returns = () => {
                             <th>AMOUNT</th>
                             <th>DATE</th>
                             <th>STATUS</th>
+                            <th>ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody>
                         {returns.length === 0 ? (
                             <tr>
-                                <td colSpan="8" style={{ textAlign: 'center', padding: '20px' }}>No returns found.</td>
+                                <td colSpan="9" style={{ textAlign: 'center', padding: '20px' }}>No returns found.</td>
                             </tr>
                         ) : (
                             returns.map((ret) => (
@@ -66,6 +67,43 @@ const Returns = () => {
                                         <span className={`status-badge ${ret.return_status}`}>
                                             {ret.return_status}
                                         </span>
+                                    </td>
+                                    <td>
+                                        {ret.return_status === 'pending' && (
+                                            <div style={{ display: 'flex', gap: '5px' }}>
+                                                <button
+                                                    onClick={async () => {
+                                                        await api.updateReturnStatus(ret.return_id, 'approved');
+                                                        window.location.reload(); // Simple reload to refresh
+                                                    }}
+                                                    style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                                                >
+                                                    APPROVE
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        await api.updateReturnStatus(ret.return_id, 'rejected');
+                                                        window.location.reload();
+                                                    }}
+                                                    style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                                                >
+                                                    REJECT
+                                                </button>
+                                            </div>
+                                        )}
+                                        {ret.return_status === 'approved' && (
+                                            <button
+                                                onClick={async () => {
+                                                    await api.updateReturnStatus(ret.return_id, 'completed');
+                                                    window.location.reload();
+                                                }}
+                                                style={{ background: '#22c55e', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                                            >
+                                                COMPLETE (RESTOCK)
+                                            </button>
+                                        )}
+                                        {ret.return_status === 'completed' && <span style={{ color: '#22c55e', fontSize: '12px' }}>Done</span>}
+                                        {ret.return_status === 'rejected' && <span style={{ color: '#ef4444', fontSize: '12px' }}>Rejected</span>}
                                     </td>
                                 </tr>
                             ))

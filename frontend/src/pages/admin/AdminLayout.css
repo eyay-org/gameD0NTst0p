@@ -300,12 +300,6 @@
     border: 1px solid #34d399;
 }
 
-.status-badge.cancelled {
-    background-color: #7f1d1d;
-    color: #f87171;
-    border: 1px solid #f87171;
-}
-
 .status-badge.returned {
     background-color: #581c87;
     color: #d8b4fe;

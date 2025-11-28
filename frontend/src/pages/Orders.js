@@ -73,27 +73,7 @@ const Orders = () => {
                     <span className={`status-badge ${order.order_status}`}>
                       {order.order_status.toUpperCase()}
                     </span>
-                    {order.order_status !== 'delivered' && (
-                      <button
-                        className="pixel-button small"
-                        style={{ marginLeft: '10px' }}
-                        onClick={async (e) => {
-                          e.stopPropagation(); // Prevent toggling accordion
-                          if (window.confirm('Did you receive this order?')) {
-                            try {
-                              await api.updateOrderStatus(order.order_id, 'delivered');
-                              // Refresh orders
-                              const data = await api.getOrders(user.customer_id);
-                              setOrders(data);
-                            } catch (error) {
-                              alert('Failed to update status');
-                            }
-                          }
-                        }}
-                      >
-                        TESLİM ALDIM
-                      </button>
-                    )}
+
                   </div>
                 </div>
 
@@ -144,11 +124,44 @@ const Orders = () => {
                             Qty: {item.quantity} × ${item.unit_price.toFixed(2)}
                           </div>
                         </div>
-                        <div className="product-total" style={{ fontWeight: 'bold', color: '#fff' }}>
-                          ${(item.quantity * item.unit_price).toFixed(2)}
+                        <div className="product-total" style={{ fontWeight: 'bold', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+                          <span>${(item.quantity * item.unit_price).toFixed(2)}</span>
+
+                          {/* Show Return Status if exists */}
+                          {item.return_status && (
+                            <span className={`status-badge ${item.return_status}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                              {item.return_status.toUpperCase()}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
+
+                    {/* Full Order Return Button */}
+                    {order.order_status === 'delivered' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #333', paddingTop: '15px' }}>
+                        <button
+                          className="pixel-button"
+                          style={{ background: '#ef4444', fontSize: '12px' }}
+                          onClick={async () => {
+                            const reason = prompt("Please enter the reason for returning the ENTIRE order:");
+                            if (reason) {
+                              try {
+                                await api.requestReturn(order.order_id, reason);
+                                alert("Return requested for the entire order!");
+                                // Refresh orders
+                                const data = await api.getOrders(user.customer_id);
+                                setOrders(data);
+                              } catch (error) {
+                                alert("Failed to request return: " + (error.response?.data?.error || error.message));
+                              }
+                            }
+                          }}
+                        >
+                          RETURN ENTIRE ORDER
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -161,4 +174,3 @@ const Orders = () => {
 };
 
 export default Orders;
-
