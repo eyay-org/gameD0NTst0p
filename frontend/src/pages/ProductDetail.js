@@ -263,6 +263,19 @@ const ProductDetail = () => {
                     <span className="spec-value">{new Date(product.release_date).toLocaleDateString()}</span>
                   </div>
                 )}
+
+                {/* Average Rating Display */}
+                {product.reviews && product.reviews.length > 0 && (
+                  <div className="spec-item">
+                    <span className="spec-label">AVERAGE RATING:</span>
+                    <span className="spec-value" style={{ color: '#ffd700' }}>
+                      ★ {(product.reviews.reduce((a, b) => a + b.rating, 0) / product.reviews.length).toFixed(1)} / 5
+                      <span style={{ color: '#aaa', fontSize: '11px', marginLeft: '8px', fontWeight: 'normal' }}>
+                        (Based on {product.reviews.length} reviews)
+                      </span>
+                    </span>
+                  </div>
+                )}
                 {product.platform && (
                   <div className="spec-item">
                     <span className="spec-label">PLATFORM:</span>

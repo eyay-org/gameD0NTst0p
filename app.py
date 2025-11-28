@@ -600,16 +600,18 @@ def get_admin_orders():
         offset = (page - 1) * limit
         
         # Validate sort column to prevent SQL injection
-        valid_columns = {
-            'order_id': 'order_id',
-            'customer_name': 'customer_name',
-            'order_date': 'order_date',
-            'total_amount': 'total_amount',
-            'order_status': 'order_status',
-            'item_count': 'item_count'
+        # Validate sort column to prevent SQL injection
+        sort_mapping = {
+            'id': 'order_id',          # Fixes the bug
+            'order_id': 'order_id',    # Safety
+            'customer': 'customer_name',
+            'email': 'email',
+            'date': 'order_date',
+            'total': 'total_amount',
+            'status': 'order_status'
         }
         
-        sort_column = valid_columns.get(sort_by, 'order_date')
+        sort_column = sort_mapping.get(sort_by, 'order_date')
         if order.lower() not in ['asc', 'desc']:
             order = 'desc'
 

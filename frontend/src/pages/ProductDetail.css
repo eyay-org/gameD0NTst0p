@@ -136,9 +136,11 @@
 }
 
 .product-description p {
-  font-size: 12px;
-  line-height: 1.8;
-  color: #ddd;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #ccc;
+  font-weight: 400;
+  white-space: pre-line;
 }
 
 /* Actions Section */
@@ -151,6 +153,8 @@
   justify-content: center;
   font-weight: bold;
   letter-spacing: 1px;
+  margin-top: 25px;
+  padding-top: 10px;
 }
 
 /* Reviews Section */
@@ -521,21 +525,25 @@
   background: none;
   border: none;
   outline: none;
-  font-size: 2rem; /* Yıldızları büyütür */
+  font-size: 2rem;
+  /* Yıldızları büyütür */
   line-height: 1;
   cursor: pointer;
-  color: #555; /* Varsayılan sönük renk (Koyu Gri) */
+  color: #555;
+  /* Varsayılan sönük renk (Koyu Gri) */
   transition: color 0.2s ease-in-out, transform 0.1s;
   padding: 0;
 }
 
 /* Seçili veya Hover durumundaki yıldız (Altın Sarısı) */
 .star-btn.active {
-  color: #ffd700; 
-  text-shadow: 0 0 5px rgba(255, 215, 0, 0.5); /* Hafif parlama efekti */
+  color: #ffd700;
+  text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+  /* Hafif parlama efekti */
 }
 
 /* Hover efekti */
 .star-btn:hover {
-  transform: scale(1.2); /* Üzerine gelince hafif büyüsün */
+  transform: scale(1.2);
+  /* Üzerine gelince hafif büyüsün */
 }
