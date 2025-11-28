@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import ProductCard from '../components/ProductCard';
 import './Products.css';
 import './ErrorDisplay.css';
 
 const Products = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [genres, setGenres] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
 
   // Initialize filters from URL params
   const [filters, setFilters] = useState({
@@ -77,6 +81,22 @@ const Products = () => {
     if (newPage >= 1 && newPage <= totalPages) {
       setFilters(prev => ({ ...prev, page: newPage }));
       window.scrollTo(0, 0);
+    }
+  };
+
+  const handleAddToCart = async (e, productId) => {
+    e.preventDefault();
+    if (!user) {
+      alert('Please login to add items to cart');
+      navigate('/login');
+      return;
+    }
+
+    try {
+      await api.addToCart(user.customer_id, productId);
+      alert('Added to cart!');
+    } catch (error) {
+      alert('Failed to add to cart: ' + error.message);
     }
   };
 
@@ -212,11 +232,34 @@ const Products = () => {
               value={filters.sort_by}
               onChange={(e) => handleFilterChange('sort_by', e.target.value)}
             >
+              <option value="name_asc">NAME: A-Z</option>
               <option value="newest">NEWEST</option>
+              <option value="oldest">OLDEST</option>
               <option value="price_asc">PRICE: LOW TO HIGH</option>
               <option value="price_desc">PRICE: HIGH TO LOW</option>
-              <option value="name_asc">NAME: A-Z</option>
+              <option value="rating_desc">RATING: HIGH TO LOW</option>
+              <option value="rating_asc">RATING: LOW TO HIGH</option>
             </select>
+          </div>
+
+          <div className="filter-group view-toggle-group">
+            <label>VIEW:</label>
+            <div className="view-toggle">
+              <button
+                className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                onClick={() => setViewMode('grid')}
+                title="Grid View"
+              >
+                ⊞ GRID
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setViewMode('list')}
+                title="List View"
+              >
+                ☰ LIST
+              </button>
+            </div>
           </div>
         </div>
 
@@ -285,17 +328,82 @@ const Products = () => {
             <div className="loading">LOADING...</div>
           </div>
         ) : (
-          <div className="products-grid">
+          <>
             {products.length > 0 ? (
-              products.map(product => (
-                <ProductCard key={product.product_id} product={product} />
-              ))
+              viewMode === 'grid' ? (
+                <div className="products-grid">
+                  {products.map(product => (
+                    <ProductCard key={product.product_id} product={product} />
+                  ))}
+                </div>
+              ) : (
+                <div className="products-list">
+                  {products.map(product => (
+                    <div key={product.product_id} className="product-list-item">
+                      <div className="list-item-image">
+                        <Link to={`/products/${product.product_id}`}>
+                          <img
+                            src={product.main_image || product.image || '/placeholder-game.png'}
+                            alt={product.product_name}
+                            onError={(e) => {
+                              e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%234a90e2" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="white" font-family="monospace" font-size="20"%3E🎮%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                        </Link>
+                      </div>
+
+                      <div className="list-item-info">
+                        <Link to={`/products/${product.product_id}`} className="list-item-title">
+                          {product.product_name}
+                        </Link>
+
+                        <div className="list-item-meta">
+                          {product.platform && (
+                            <span className="meta-badge platform">{product.platform}</span>
+                          )}
+                          {product.genres && product.genres.length > 0 && (
+                            <span className="meta-badge genre">{product.genres[0]}</span>
+                          )}
+                          {product.release_date && (
+                            <span className="meta-text">
+                              📅 {new Date(product.release_date).toLocaleDateString()}
+                            </span>
+                          )}
+                          {product.avg_rating > 0 && (
+                            <span className="meta-text rating" style={{ color: '#ffd700' }}>
+                              ★ {parseFloat(product.avg_rating).toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+
+                        {product.description && (
+                          <p className="list-item-description">
+                            {product.description.length > 150
+                              ? product.description.substring(0, 150) + '...'
+                              : product.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="list-item-actions">
+                        <div className="list-item-price">${parseFloat(product.price).toFixed(2)}</div>
+                        <button
+                          className="pixel-button add-cart-btn"
+                          onClick={(e) => handleAddToCart(e, product.product_id)}
+                        >
+                          ADD TO CART
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="no-products">
                 <p>NO PRODUCTS FOUND</p>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {/* Pagination Controls */}

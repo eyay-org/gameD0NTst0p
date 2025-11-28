@@ -179,6 +179,12 @@ def get_products():
             query += " ORDER BY p.price DESC"
         elif sort_by == 'name_asc':
             query += " ORDER BY p.product_name ASC"
+        elif sort_by == 'rating_desc':
+            query += " ORDER BY avg_rating DESC"
+        elif sort_by == 'rating_asc':
+            query += " ORDER BY avg_rating ASC"
+        elif sort_by == 'oldest':
+            query += " ORDER BY p.release_date ASC"
         else:  # newest (default)
             query += " ORDER BY p.release_date DESC"
             
