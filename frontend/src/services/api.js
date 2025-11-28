@@ -39,6 +39,13 @@ const apiService = {
   registerCustomer: (customerData) => api.post('/customers/register', customerData),
   loginCustomer: (credentials) => api.post('/customers/login', credentials),
 
+  // Profile
+  getProfile: (customerId) => api.get('/profile', { params: { customer_id: customerId } }),
+  updateProfile: (data) => api.put('/profile/update', data),
+  changePassword: (data) => api.put('/profile/password', data),
+  addAddress: (data) => api.post('/profile/address', data),
+  deleteAddress: (addressId, customerId) => api.delete(`/profile/address/${addressId}`, { params: { customer_id: customerId } }),
+
   // Cart
   getCart: (customerId) => api.get(`/cart/${customerId}`),
   addToCart: (customerId, productId, quantity = 1) => api.post('/cart', { customer_id: customerId, product_id: productId, quantity }),

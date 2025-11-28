@@ -478,6 +478,178 @@ def login_customer():
         return jsonify({'error': str(e)}), 500
 
 
+
+# ============================================================================
+# PROFILE & ADDRESS ENDPOINTS
+# ============================================================================
+
+@app.route('/api/profile', methods=['GET'])
+def get_profile():
+    """Get user profile and addresses"""
+    try:
+        customer_id = request.args.get('customer_id')
+        if not customer_id:
+            return jsonify({'error': 'Customer ID required'}), 400
+            
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Get Customer Details
+        cursor.execute("""
+            SELECT customer_id, first_name, last_name, email, phone, registration_date
+            FROM CUSTOMER WHERE customer_id = %s
+        """, (customer_id,))
+        customer = cursor.fetchone()
+        
+        if not customer:
+            return jsonify({'error': 'Customer not found'}), 404
+            
+        # Get Addresses
+        cursor.execute("""
+            SELECT * FROM ADDRESS WHERE customer_id = %s
+        """, (customer_id,))
+        addresses = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({
+            'user': customer,
+            'addresses': addresses
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/profile/update', methods=['PUT'])
+def update_profile():
+    """Update user profile info"""
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        phone = data.get('phone')
+        
+        if not all([customer_id, first_name, last_name]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        cnx = get_db_connection()
+        cursor = cnx.cursor()
+        
+        cursor.execute("""
+            UPDATE CUSTOMER 
+            SET first_name = %s, last_name = %s, phone = %s
+            WHERE customer_id = %s
+        """, (first_name, last_name, phone, customer_id))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Profile updated successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/profile/password', methods=['PUT'])
+def change_password():
+    """Change user password"""
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        
+        if not all([customer_id, old_password, new_password]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        cnx = get_db_connection()
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Verify old password
+        cursor.execute("SELECT password_hash FROM CUSTOMER WHERE customer_id = %s", (customer_id,))
+        user = cursor.fetchone()
+        
+        if not user or user['password_hash'] != hash_password(old_password):
+            return jsonify({'error': 'Incorrect current password'}), 400
+            
+        # Update password
+        new_hash = hash_password(new_password)
+        cursor.execute("UPDATE CUSTOMER SET password_hash = %s WHERE customer_id = %s", (new_hash, customer_id))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Password changed successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/profile/address', methods=['POST'])
+def add_address():
+    """Add new address"""
+    try:
+        data = request.json
+        customer_id = data.get('customer_id')
+        title = data.get('address_type') # Using address_type as title (e.g. Home, Work)
+        city = data.get('city')
+        full_address = data.get('full_address')
+        
+        if not all([customer_id, title, city, full_address]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        cnx = get_db_connection()
+        cursor = cnx.cursor()
+        
+        cursor.execute("""
+            INSERT INTO ADDRESS (customer_id, address_type, city, full_address)
+            VALUES (%s, %s, %s, %s)
+        """, (customer_id, title, city, full_address))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Address added successfully'}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/profile/address/<int:address_id>', methods=['DELETE'])
+def delete_address(address_id):
+    """Delete address"""
+    try:
+        customer_id = request.args.get('customer_id') # Security check
+        
+        cnx = get_db_connection()
+        cursor = cnx.cursor()
+        
+        # Verify ownership
+        cursor.execute("SELECT 1 FROM ADDRESS WHERE address_id = %s AND customer_id = %s", (address_id, customer_id))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Address not found or access denied'}), 403
+            
+        cursor.execute("DELETE FROM ADDRESS WHERE address_id = %s", (address_id,))
+        
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        
+        return jsonify({'message': 'Address deleted successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
