@@ -296,8 +296,23 @@ const ProductDetail = () => {
                 )}
                 {product.ESRB_rating && (
                   <div className="spec-item">
-                    <span className="spec-label">RATING:</span>
-                    <span className="spec-value rating-badge">{product.ESRB_rating}</span>
+                    <span className="spec-label">ESRB:</span>
+                    <span
+                      className="spec-value rating-badge"
+                      style={{
+                        backgroundColor:
+                          product.ESRB_rating === 'E' ? '#4CAF50' : // Green
+                            product.ESRB_rating === 'T' ? '#FF9800' : // Orange
+                              ['M', 'AO'].includes(product.ESRB_rating) ? '#F44336' : // Red
+                                '#9E9E9E', // Gray for RP/EC/Others
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {product.ESRB_rating}
+                    </span>
                   </div>
                 )}
                 {product.genres && product.genres.length > 0 && (
@@ -468,7 +483,7 @@ const ProductDetail = () => {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 

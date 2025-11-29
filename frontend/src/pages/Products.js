@@ -28,6 +28,7 @@ const Products = () => {
     platform: searchParams.get('platform') || '',
     min_rating: searchParams.get('min_rating') || '',
     multiplayer: searchParams.get('multiplayer') === 'true',
+    esrb: searchParams.get('esrb') || '',
     page: parseInt(searchParams.get('page')) || 1
   });
   const [totalPages, setTotalPages] = useState(1);
@@ -134,6 +135,7 @@ const Products = () => {
             />
           </div>
 
+          {/* TYPE FILTER */}
           <div className="filter-group">
             <label>TYPE:</label>
             <select
@@ -147,62 +149,141 @@ const Products = () => {
             </select>
           </div>
 
-          <div className="filter-group">
-            <label>PLATFORM:</label>
-            <select
-              className="pixel-input"
-              value={filters.platform}
-              onChange={(e) => handleFilterChange('platform', e.target.value)}
-            >
-              <option value="">ALL PLATFORMS</option>
-              {platforms.map((platform, idx) => (
-                <option key={idx} value={platform}>
-                  {platform}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* GAME SPECIFIC FILTERS */}
+          {(filters.type === 'game' || filters.type === '') && (
+            <>
+              <div className="filter-group">
+                <label>PLATFORM:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.platform}
+                  onChange={(e) => handleFilterChange('platform', e.target.value)}
+                >
+                  <option value="">ALL PLATFORMS</option>
+                  {platforms.map((platform, idx) => (
+                    <option key={idx} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="filter-group">
-            <label>GENRE:</label>
-            <select
-              className="pixel-input"
-              value={filters.genre}
-              onChange={(e) => handleFilterChange('genre', e.target.value)}
-            >
-              <option value="">ALL GENRES</option>
-              {genres.map(genre => (
-                <option key={genre.genre_id} value={genre.genre_name}>
-                  {genre.genre_name}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="filter-group">
+                <label>GENRE:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.genre}
+                  onChange={(e) => handleFilterChange('genre', e.target.value)}
+                >
+                  <option value="">ALL GENRES</option>
+                  {genres.map(genre => (
+                    <option key={genre.genre_id} value={genre.genre_name}>
+                      {genre.genre_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="filter-group">
-            <label>RATING:</label>
-            <select
-              className="pixel-input"
-              value={filters.min_rating}
-              onChange={(e) => handleFilterChange('min_rating', e.target.value)}
-            >
-              <option value="">ANY RATING</option>
-              <option value="4">4+ STARS</option>
-              <option value="3">3+ STARS</option>
-              <option value="2">2+ STARS</option>
-            </select>
-          </div>
+              <div className="filter-group">
+                <label>RATING:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.min_rating}
+                  onChange={(e) => handleFilterChange('min_rating', e.target.value)}
+                >
+                  <option value="">ANY RATING</option>
+                  <option value="4">4+ STARS</option>
+                  <option value="3">3+ STARS</option>
+                  <option value="2">2+ STARS</option>
+                </select>
+              </div>
 
-          <div className="filter-group checkbox-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={filters.multiplayer}
-                onChange={(e) => handleFilterChange('multiplayer', e.target.checked)}
-              />
-              MULTIPLAYER ONLY
-            </label>
-          </div>
+              <div className="filter-group">
+                <label>ESRB RATING:</label>
+                <div className="checkbox-list">
+                  {['EC', 'E', 'E10+', 'T', 'M', 'AO', 'RP'].map(rating => (
+                    <label key={rating} className="checkbox-label small">
+                      <input
+                        type="checkbox"
+                        checked={filters.esrb ? filters.esrb.split(',').includes(rating) : false}
+                        onChange={(e) => {
+                          const current = filters.esrb ? filters.esrb.split(',') : [];
+                          let next;
+                          if (e.target.checked) {
+                            next = [...current, rating];
+                          } else {
+                            next = current.filter(r => r !== rating);
+                          }
+                          handleFilterChange('esrb', next.join(','));
+                        }}
+                      />
+                      {rating}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-group checkbox-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={filters.multiplayer}
+                    onChange={(e) => handleFilterChange('multiplayer', e.target.checked)}
+                  />
+                  MULTIPLAYER ONLY
+                </label>
+              </div>
+            </>
+          )}
+
+          {/* CONSOLE SPECIFIC FILTERS */}
+          {filters.type === 'console' && (
+            <>
+              <div className="filter-group">
+                <label>MANUFACTURER:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.manufacturer || ''}
+                  onChange={(e) => handleFilterChange('manufacturer', e.target.value)}
+                >
+                  <option value="">ALL MANUFACTURERS</option>
+                  <option value="Sony">Sony (PlayStation)</option>
+                  <option value="Microsoft">Microsoft (Xbox)</option>
+                  <option value="Nintendo">Nintendo</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>STORAGE:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.storage || ''}
+                  onChange={(e) => handleFilterChange('storage', e.target.value)}
+                >
+                  <option value="">ANY STORAGE</option>
+                  <option value="500GB">500GB</option>
+                  <option value="1TB">1TB</option>
+                  <option value="2TB">2TB</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label>COLOR:</label>
+                <select
+                  className="pixel-input"
+                  value={filters.color || ''}
+                  onChange={(e) => handleFilterChange('color', e.target.value)}
+                >
+                  <option value="">ANY COLOR</option>
+                  <option value="Black">Black</option>
+                  <option value="White">White</option>
+                  <option value="Grey">Grey</option>
+                  <option value="Blue">Blue</option>
+                  <option value="Limited Edition">Limited Edition</option>
+                </select>
+              </div>
+            </>
+          )}
 
           <div className="filter-group">
             <label>PRICE RANGE:</label>
@@ -301,6 +382,15 @@ const Products = () => {
                 style={{ fontSize: '0.8rem', padding: '5px 10px' }}
               >
                 MULTIPLAYER ✖
+              </button>
+            )}
+            {filters.esrb && (
+              <button
+                className="pixel-button small"
+                onClick={() => handleFilterChange('esrb', '')}
+                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
+              >
+                ESRB: {filters.esrb} ✖
               </button>
             )}
             <button

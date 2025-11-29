@@ -33,23 +33,6 @@
   color: #4a90e2;
 }
 
-.filter-group select {
-  cursor: pointer;
-}
-
-.no-products {
-  text-align: center;
-  padding: 60px 20px;
-  font-size: 14px;
-  color: #4a90e2;
-}
-
-.products-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 30px;
-}
-
 /* View Toggle Styles */
 .view-toggle-group {
   flex: 0 0 auto;
