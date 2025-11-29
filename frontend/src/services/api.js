@@ -68,10 +68,10 @@ const apiService = {
   getAdminAnalytics: () => api.get('/admin/analytics'),
   getSuppliers: () => api.get('/admin/suppliers'),
   restockInventory: (data) => api.post('/admin/restock', data),
-  getBranches: () => api.get('/admin/branches'),
+  getBranches: (params = {}) => api.get('/admin/branches', { params }),
   transferInventory: (data) => api.post('/admin/inventory/transfer', data),
   recordOfflineSale: (data) => api.post('/admin/sales/offline', data),
-  getAdminReturns: () => api.get('/admin/returns'),
+  getAdminReturns: (params = {}) => api.get('/admin/returns', { params }),
   requestReturn: (orderId, reason) => api.post('/returns/request', {
     order_id: orderId,
     reason

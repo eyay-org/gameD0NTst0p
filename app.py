@@ -1186,17 +1186,24 @@ def create_order():
                     item['quantity'],
                     item['unit_price']
                 ))
-                
-                # Insert Sale Record
-                cursor.execute("""
-                    INSERT INTO SALE (order_id, customer_id, branch_id, transaction_date, transaction_amount)
-                    VALUES (%s, %s, %s, NOW(), %s)
-                """, (
-                    order_id,
-                    data['customer_id'],
-                    branch_info['branch_id'],
-                    item['quantity'] * item['unit_price']
-                ))
+            
+            # 5. Record Sale (Revenue Recognition)
+            # Calculate financials
+            total_amount = float(data['total_amount'])
+            cost = total_amount * 0.65 # Simulated cost
+            profit = total_amount - cost
+            
+            cursor.execute("""
+                INSERT INTO SALE 
+                (customer_id, order_id, branch_id, transaction_date, transaction_amount, cost, profit, sale_type)
+                VALUES (%s, %s, NULL, NOW(), %s, %s, %s, 'online')
+            """, (
+                data['customer_id'],
+                order_id,
+                total_amount,
+                cost,
+                profit
+            ))
             
             # Clear cart
             cursor.execute("DELETE FROM CART WHERE customer_id = %s", (data['customer_id'],))
@@ -1427,19 +1434,20 @@ def update_order_status(order_id):
                             refund_amount = item['quantity'] * item['unit_price']
                             cursor.execute("""
                                 INSERT INTO `RETURN` 
-                                (customer_id, order_id, product_id, transaction_date, quantity, 
-                                 refund_amount, return_reason, return_status, refund_date)
-                                VALUES (%s, %s, %s, NOW(), %s, %s, %s, %s, NOW())
+                                (customer_id, order_id, product_id, transaction_date, quantity, refund_amount, return_reason, return_status, refund_date)
+                                VALUES (%s, %s, %s, NOW(), %s, %s, 'Admin initiated return', 'completed', NOW())
                             """, (
                                 current_order['customer_id'],
                                 order_id,
                                 item['product_id'],
                                 item['quantity'],
-                                refund_amount,
-                                "Admin processed return",
-                                "completed"
+                                refund_amount
                             ))
                 
+                # 5. REVENUE REVERSAL: Remove from SALE table
+                cursor.execute("DELETE FROM SALE WHERE order_id = %s", (order_id,))
+
+                # Finally update order status
                 cursor.execute("UPDATE `ORDER` SET order_status = %s WHERE order_id = %s", (new_status, order_id))
                 
             else:
@@ -1491,7 +1499,7 @@ def check_review_eligibility(product_id, customer_id):
 
 @app.route('/api/admin/returns', methods=['GET'])
 def get_admin_returns():
-    """Get all returns"""
+    """Get all returns with sorting"""
     try:
         cnx = get_db_connection()
         if not cnx:
@@ -1499,7 +1507,26 @@ def get_admin_returns():
         
         cursor = cnx.cursor(dictionary=True)
         
-        query = """
+        # Sorting parameters
+        sort_by = request.args.get('sort_by', 'date')
+        order = request.args.get('order', 'desc')
+        
+        # Column mapping
+        sort_mapping = {
+            'id': 'r.return_id',
+            'order': 'r.order_id',
+            'customer': 'c.email',
+            'product': 'p.product_name',
+            'reason': 'r.return_reason',
+            'amount': 'r.refund_amount',
+            'date': 'r.refund_date',
+            'status': 'r.return_status'
+        }
+        
+        sort_column = sort_mapping.get(sort_by, 'r.refund_date')
+        sort_direction = 'ASC' if order == 'asc' else 'DESC'
+        
+        query = f"""
             SELECT 
                 r.return_id,
                 r.order_id,
@@ -1514,7 +1541,7 @@ def get_admin_returns():
             FROM `RETURN` r
             JOIN CUSTOMER c ON r.customer_id = c.customer_id
             JOIN PRODUCT p ON r.product_id = p.product_id
-            ORDER BY r.refund_date DESC
+            ORDER BY {sort_column} {sort_direction}
         """
         
         cursor.execute(query)
@@ -1524,6 +1551,45 @@ def get_admin_returns():
         cnx.close()
         
         return jsonify(returns), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/branches', methods=['GET'])
+def get_admin_branches():
+    """Get all branches with sorting"""
+    try:
+        cnx = get_db_connection()
+        if not cnx:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = cnx.cursor(dictionary=True)
+        
+        # Sorting parameters
+        sort_by = request.args.get('sort_by', 'id')
+        order = request.args.get('order', 'asc')
+        
+        # Column mapping
+        sort_mapping = {
+            'id': 'branch_id',
+            'name': 'branch_name',
+            'address': 'address',
+            'phone': 'phone',
+            'manager': 'manager_name'
+        }
+        
+        sort_column = sort_mapping.get(sort_by, 'branch_id')
+        sort_direction = 'ASC' if order == 'asc' else 'DESC'
+        
+        query = f"SELECT * FROM BRANCH ORDER BY {sort_column} {sort_direction}"
+        
+        cursor.execute(query)
+        branches = cursor.fetchall()
+        
+        cursor.close()
+        cnx.close()
+        
+        return jsonify(branches), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1616,6 +1682,13 @@ def update_return_status(return_id):
         cursor = cnx.cursor(dictionary=True)
         
         try:
+            # Get current status
+            cursor.execute("SELECT return_status FROM `RETURN` WHERE return_id = %s", (return_id,))
+            current_return = cursor.fetchone()
+            if not current_return:
+                return jsonify({'error': 'Return not found'}), 404
+            old_status = current_return['return_status']
+
             # Update status
             update_query = "UPDATE `RETURN` SET return_status = %s"
             params = [new_status]
@@ -1628,8 +1701,8 @@ def update_return_status(return_id):
             
             cursor.execute(update_query, tuple(params))
             
-            # If Completed: Restore Inventory and Update Order Status
-            if new_status == 'completed':
+            # If Completed AND NOT previously completed: Restore Inventory and Update Order Status
+            if new_status == 'completed' and old_status != 'completed':
                 # Get return details
                 cursor.execute("SELECT order_id, product_id, quantity FROM `RETURN` WHERE return_id = %s", (return_id,))
                 ret = cursor.fetchone()
@@ -1699,8 +1772,6 @@ def get_admin_analytics():
                 COALESCE(SUM(s.profit), 0) as total_profit,
                 COUNT(s.sale_id) as total_transactions
             FROM SALE s
-            JOIN `ORDER` o ON s.order_id = o.order_id
-            WHERE o.order_status NOT IN ('cancelled', 'returned')
         """)
         totals = cursor.fetchone()
         
@@ -1720,8 +1791,6 @@ def get_admin_analytics():
                 COALESCE(SUM(s.profit), 0) as profit
             FROM BRANCH b
             LEFT JOIN SALE s ON b.branch_id = s.branch_id
-            LEFT JOIN `ORDER` o ON s.order_id = o.order_id
-            WHERE o.order_status IS NULL OR o.order_status NOT IN ('cancelled', 'returned')
             GROUP BY b.branch_id, b.branch_name
             ORDER BY revenue DESC
         """)
@@ -1730,6 +1799,7 @@ def get_admin_analytics():
         # 3. Top Selling Products (by quantity sold)
         # We join ORDER_DETAIL -> PRODUCT to get names and counts
         # Note: This counts items from all orders, not just those in SALE table (which mirrors orders)
+        # To be strictly accurate, we should only count items from orders that have a corresponding SALE record
         cursor.execute("""
             SELECT 
                 p.product_name,
@@ -1737,8 +1807,7 @@ def get_admin_analytics():
                 SUM(od.quantity * od.unit_price) as revenue
             FROM ORDER_DETAIL od
             JOIN PRODUCT p ON od.product_id = p.product_id
-            JOIN `ORDER` o ON od.order_id = o.order_id
-            WHERE o.order_status NOT IN ('cancelled', 'returned')
+            JOIN SALE s ON od.order_id = s.order_id
             GROUP BY p.product_id, p.product_name
             ORDER BY total_sold DESC
             LIMIT 5

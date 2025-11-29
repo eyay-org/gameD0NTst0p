@@ -783,7 +783,7 @@ def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
         """
         SELECT order_id, customer_id, total_amount, order_date
         FROM `ORDER`
-        WHERE order_status IN ('delivered', 'shipped')
+        WHERE order_status NOT IN ('cancelled', 'returned')
         LIMIT 1000
     """
     )

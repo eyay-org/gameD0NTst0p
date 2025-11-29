@@ -20,6 +20,8 @@ import Branches from './pages/admin/Branches';
 import Returns from './pages/admin/Returns';
 import './App.css';
 
+import AdminRoute from './components/AdminRoute';
+
 function App() {
   return (
     <AuthProvider>
@@ -39,7 +41,11 @@ function App() {
               <Route path="/profile" element={<Profile />} />
 
               {/* Admin Routes */}
-              <Route path="/admin" element={<AdminLayout />}>
+              <Route path="/admin" element={
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
+              }>
                 <Route index element={<AdminDashboard />} />
                 <Route path="inventory" element={<InventoryManager />} />
                 <Route path="orders" element={<OrderManager />} />

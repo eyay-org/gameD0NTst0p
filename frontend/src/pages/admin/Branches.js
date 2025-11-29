@@ -4,11 +4,19 @@ import api from '../../services/api';
 const Branches = () => {
     const [branches, setBranches] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [sortConfig, setSortConfig] = useState({
+        key: 'id',
+        direction: 'asc'
+    });
 
     useEffect(() => {
         const fetchBranches = async () => {
             try {
-                const data = await api.getBranches();
+                const params = {
+                    sort_by: sortConfig.key,
+                    order: sortConfig.direction
+                };
+                const data = await api.getBranches(params);
                 setBranches(data);
             } catch (error) {
                 console.error('Failed to load branches:', error);
@@ -17,7 +25,19 @@ const Branches = () => {
             }
         };
         fetchBranches();
-    }, []);
+    }, [sortConfig]);
+
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const getSortIcon = (key) => {
+        if (sortConfig.key !== key) return '↕';
+        return sortConfig.direction === 'asc' ? '↑' : '↓';
+    };
 
     if (loading) return <div className="loading">LOADING BRANCHES...</div>;
 
@@ -31,11 +51,21 @@ const Branches = () => {
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>BRANCH NAME</th>
-                            <th>ADDRESS</th>
-                            <th>PHONE</th>
-                            <th>MANAGER</th>
+                            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('id')}>
+                                ID {getSortIcon('id')}
+                            </th>
+                            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>
+                                BRANCH NAME {getSortIcon('name')}
+                            </th>
+                            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('address')}>
+                                ADDRESS {getSortIcon('address')}
+                            </th>
+                            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('phone')}>
+                                PHONE {getSortIcon('phone')}
+                            </th>
+                            <th style={{ cursor: 'pointer' }} onClick={() => handleSort('manager')}>
+                                MANAGER {getSortIcon('manager')}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
