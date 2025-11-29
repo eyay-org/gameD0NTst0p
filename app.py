@@ -70,6 +70,14 @@ def get_products():
         min_rating = request.args.get('min_rating', type=float)
         multiplayer = request.args.get('multiplayer') == 'true'
         
+        # Console specific filters
+        storage = request.args.get('storage', '')
+        color = request.args.get('color', '')
+        manufacturer = request.args.get('manufacturer', '')
+        
+        # Game specific filters
+        esrb = request.args.get('esrb', '') # Comma separated list
+        
         offset = (page - 1) * limit
         
         # Base Joins
@@ -98,6 +106,27 @@ def get_products():
         if genre:
             where_clause += " AND g.genre_name = %s"
             params.append(genre)
+            
+        # Console Specific Filters
+        if storage:
+            where_clause += " AND c.storage_capacity = %s"
+            params.append(storage)
+            
+        if color:
+            where_clause += " AND c.color = %s"
+            params.append(color)
+            
+        if manufacturer:
+            where_clause += " AND c.manufacturer = %s"
+            params.append(manufacturer)
+            
+        # Game Specific Filters
+        if esrb:
+            # Convert comma separated string to list for IN clause
+            esrb_list = esrb.split(',')
+            placeholders = ','.join(['%s'] * len(esrb_list))
+            where_clause += f" AND gm.ESRB_rating IN ({placeholders})"
+            params.extend(esrb_list)
             
         if platform:
             if product_type == 'console':

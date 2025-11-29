@@ -128,10 +128,18 @@ def load_games(cnx, cursor, igdb_genre_map):
     # --- ESRB RATING MAP (Sayıları Metne Çevirmek için) ---
     ESRB_MAP = {6: "RP", 7: "EC", 8: "E", 9: "E10+", 10: "T", 11: "M", 12: "AO"}
 
+    # --- PEGI MAPPING (ESRB Karşılıkları) ---
+    PEGI_TO_ESRB_TEXT = {
+        1: "E",   # PEGI 3
+        2: "E",   # PEGI 7
+        3: "T",   # PEGI 12
+        4: "M",   # PEGI 16
+        5: "M"    # PEGI 18
+    }
+
     # --- DİL TİPİ MAP (Sayıları Metne Çevirmek için) ---
     LANG_SUPPORT_TYPE = {1: "audio", 2: "subtitles", 3: "interface"}
 
-    # --- KAPSAMLI API SORGUSU - Popüler oyunları çekiyoruz ---
     # --- KAPSAMLI API SORGUSU - Popüler oyunları çekiyoruz ---
     # Rastgelelik eklemek için offset kullanıyoruz (İlk 200 popüler oyun arasından 50 tane seçer)
     random_offset = random.randint(0, 150)
@@ -142,7 +150,7 @@ def load_games(cnx, cursor, igdb_genre_map):
         "platforms.name, platforms.id, "
         "genres, "
         "involved_companies.company.name, involved_companies.developer, involved_companies.publisher, "
-        "age_ratings.rating, age_ratings.category, "
+        "age_ratings.organization, age_ratings.rating_category, "
         "game_modes.name, "
         "language_supports.language.name, language_supports.language_support_type, "
         "cover.url, cover.image_id, "
@@ -240,15 +248,15 @@ def load_games(cnx, cursor, igdb_genre_map):
                 ", ".join(platform_names) if platform_names else "Bilinmiyor"
             )
 
-            # Extract ESRB Rating
-            esrb_rating_text = None
-            if "age_ratings" in game:
-                for rating in game["age_ratings"]:
-                    cat_id = rating.get("category")
-                    rating_num = rating.get("rating")
-                    if cat_id == 1:  # 1 = ESRB
-                        esrb_rating_text = ESRB_MAP.get(rating_num)
-                        break
+            # Extract ESRB Rating (Synthetic)
+            # IGDB data is inconsistent, so we use synthetic data for demo purposes
+            POSSIBLE_RATINGS = ['E', 'E10+', 'T', 'M', 'AO', 'RP']
+            # Weighted choice to make T and M more common for a game store
+            esrb_rating_text = random.choices(
+                POSSIBLE_RATINGS, 
+                weights=[20, 15, 30, 30, 2, 3], 
+                k=1
+            )[0]
 
             # Extract Multiplayer info
             multiplayer = False
@@ -557,69 +565,100 @@ def load_consoles(cnx, cursor):
         "VALUES (%s, %s, %s, %s, %s)"
     )
 
-    storage_map = {
-        1: "8GB", 2: "16GB", 3: "32GB", 4: "64GB",
-        5: "128GB", 6: "256GB", 7: "512GB", 8: "1TB", 9: "2TB"
-    }
+    # Define variant options
+    storage_options = ['500GB', '1TB', '2TB']
+    color_options = ['Black', 'White', 'Limited Edition', 'Grey', 'Blue']
 
     for console in console_list:
         try:
-            # --- 1. Verileri Hazırla ---
-            console_name = console.get("name", "İsimsiz Konsol")
+            # --- 1. Verileri Hazırla (Base Data) ---
+            base_name = console.get("name", "İsimsiz Konsol")
             console_summary = console.get("summary", "Açıklama yok.")
             console_brand = console.get("platform_family", {}).get("name", "Bilinmiyor")
             generation = console.get("generation", 8)
             
-            fake_storage = storage_map.get(generation, "1TB")
-            base_price = 199.99
-            fake_price = round(base_price + (generation * 50), 2)
+            # Base Price calculation
+            base_price = 199.99 + (generation * 50)
+            
+            # Real Release Dates Map
+            RELEASE_DATES = {
+                48: '2013-11-15',  # PS4
+                49: '2013-11-22',  # Xbox One
+                130: '2017-03-03', # Switch
+                167: '2020-11-12', # PS5
+                169: '2020-11-10', # Xbox Series X
+                9: '2006-11-11',   # PS3
+                12: '2005-11-22',  # Xbox 360
+                5: '2006-11-19',   # Wii
+                41: '2012-11-18',  # Wii U
+                37: '2011-02-26'   # 3DS
+            }
+            
+            console_id = int(console.get("id"))
+            fake_release_date = RELEASE_DATES.get(console_id, "2020-11-12")
             
             # IGDB'de olmayan varsayılan veriler
-            fake_release_date = "2020-11-12"
             fake_weight = 4.5
             fake_dims = "39x26x10 cm"
-            fake_color = "Black"
             fake_accessories = "Controller, HDMI Cable, Power Cable"
             fake_warranty = 12
 
-            # --- 2. PRODUCT Tablosuna Ekle ---
-            cursor.execute(query_product, (
-                console_name, console_summary, fake_release_date,
-                fake_price, console_brand, fake_weight, fake_dims
-            ))
-            yeni_product_id = cursor.lastrowid
-
-            # --- 3. CONSOLE Tablosuna Ekle ---
-            cursor.execute(query_console, (
-                yeni_product_id, console_brand, console_name, fake_storage,
-                fake_color, fake_accessories, fake_warranty
-            ))
-
-            # --- 4. MEDYA YÜKLEME (MANUEL HARİTADAN) ---
-            console_id = int(console.get("id"))
-            
-            # Haritamızda bu konsol var mı?
-            assets = CONSOLE_ASSET_MAP.get(console_id)
-            
-            if assets:
-                # 4a. Donanım Resmi (Main Image)
-                hardware_url = assets.get("hardware")
-                if hardware_url:
-                    cursor.execute(
-                        query_media, (yeni_product_id, "photo", hardware_url, 0, True)
-                    )
+            # Create 3 Variants for each console
+            for i in range(3):
+                # Randomize attributes
+                storage = random.choice(storage_options)
+                color = random.choice(color_options)
                 
-                # 4b. Logo Resmi (Secondary Image)
-                logo_url = assets.get("logo")
-                if logo_url:
-                    cursor.execute(
-                        query_media, (yeni_product_id, "photo", logo_url, 1, False)
-                    )
-            else:
-                print(f"  > UYARI: ID {console_id} için görsel haritası bulunamadı.")
+                # Adjust price based on attributes
+                variant_price = base_price
+                if storage == '1TB': variant_price += 50
+                elif storage == '2TB': variant_price += 100
+                
+                if color == 'Limited Edition': variant_price += 30
+                
+                variant_price = round(variant_price, 2)
+                
+                # Create distinct name
+                console_name = f"{base_name} ({storage} - {color})"
+                
+                # --- 2. PRODUCT Tablosuna Ekle ---
+                cursor.execute(query_product, (
+                    console_name, console_summary, fake_release_date,
+                    variant_price, console_brand, fake_weight, fake_dims
+                ))
+                yeni_product_id = cursor.lastrowid
 
-            cnx.commit()
-            print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")
+                # --- 3. CONSOLE Tablosuna Ekle ---
+                cursor.execute(query_console, (
+                    yeni_product_id, console_brand, base_name, storage,
+                    color, fake_accessories, fake_warranty
+                ))
+
+                # --- 4. MEDYA YÜKLEME (MANUEL HARİTADAN) ---
+                console_id = int(console.get("id"))
+                
+                # Haritamızda bu konsol var mı?
+                assets = CONSOLE_ASSET_MAP.get(console_id)
+                
+                if assets:
+                    # 4a. Donanım Resmi (Main Image)
+                    hardware_url = assets.get("hardware")
+                    if hardware_url:
+                        cursor.execute(
+                            query_media, (yeni_product_id, "photo", hardware_url, 0, True)
+                        )
+                    
+                    # 4b. Logo Resmi (Secondary Image)
+                    logo_url = assets.get("logo")
+                    if logo_url:
+                        cursor.execute(
+                            query_media, (yeni_product_id, "photo", logo_url, 1, False)
+                        )
+                else:
+                    print(f"  > UYARI: ID {console_id} için görsel haritası bulunamadı.")
+
+                cnx.commit()
+                print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")
 
         except Exception as e:
             print(f"  [X] HATA - {console.get('name', 'Bilinmeyen')}: {e}")
