@@ -35,7 +35,7 @@ NUM_ORDERS = 250
 NUM_ORDER_ITEMS_PER_ORDER = (1, 5)  # Random between 1-5 items per order
 NUM_PURCHASES = 100
 NUM_RETURNS = 30
-NUM_SALES = 200
+NUM_SALES = 250
 INVENTORY_FOR_ALL_PRODUCTS = True  # Generate inventory for all products
 
 
@@ -747,11 +747,18 @@ def load_returns(cnx, cursor, customer_ids, order_ids, product_ids):
                 ),
             )
             
-            # Update order status to 'returned'
-            cursor.execute(
-                "UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s",
-                (order_id,)
-            )
+            # Check if all items in the order are returned
+            cursor.execute("SELECT COUNT(*) as total_items FROM ORDER_DETAIL WHERE order_id = %s", (order_id,))
+            total_items = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) as returned_items FROM `RETURN` WHERE order_id = %s AND return_status = 'completed'", (order_id,))
+            returned_items = cursor.fetchone()[0]
+            
+            if returned_items >= total_items:
+                cursor.execute(
+                    "UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s",
+                    (order_id,)
+                )
             
             return_count += 1
         except mysql.connector.Error as e:
@@ -783,7 +790,6 @@ def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
         """
         SELECT order_id, customer_id, total_amount, order_date
         FROM `ORDER`
-        WHERE order_status NOT IN ('cancelled', 'returned')
         LIMIT 1000
     """
     )

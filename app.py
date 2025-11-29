@@ -1387,6 +1387,7 @@ def update_order_status(order_id):
                 items = cursor.fetchall()
                 
                 # Get branches associated with this order from SALE table
+                # Note: We keep the SALE record even if cancelled, to maintain transaction history.
                 cursor.execute("SELECT DISTINCT branch_id FROM SALE WHERE order_id = %s", (order_id,))
                 sale_branches = [row['branch_id'] for row in cursor.fetchall()]
                 
@@ -1727,18 +1728,25 @@ def update_return_status(return_id):
                         WHERE product_id = %s AND branch_id = %s
                     """, (ret['quantity'], ret['product_id'], branch_id))
                 
-                # 2. Update Order Status (Conditional)
-                # Only set order to 'returned' if ALL return items are processed
-                cursor.execute("""
-                    SELECT COUNT(*) as remaining 
-                    FROM `RETURN` 
-                    WHERE order_id = %s AND return_status IN ('pending', 'approved')
-                """, (ret['order_id'],))
+                # 2. Update Order Status (Partial Return Logic)
+                # Check if ALL items in the order have been returned
                 
-                remaining = cursor.fetchone()['remaining']
+                # Count total items in the order
+                cursor.execute("SELECT COUNT(*) as total_items FROM ORDER_DETAIL WHERE order_id = %s", (ret['order_id'],))
+                total_items = cursor.fetchone()['total_items']
                 
-                if remaining == 0:
+                # Count completed returns for this order
+                cursor.execute("SELECT COUNT(*) as returned_items FROM `RETURN` WHERE order_id = %s AND return_status = 'completed'", (ret['order_id'],))
+                returned_items = cursor.fetchone()['returned_items']
+                
+                # Only mark as 'returned' if ALL items are returned
+                if returned_items >= total_items:
                     cursor.execute("UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s", (ret['order_id'],))
+                else:
+                    # Ensure status is 'delivered' (it might have been 'shipped' or something else, but if we are returning, it was likely delivered)
+                    # Actually, better to leave it as is if it's not fully returned, or ensure it's at least 'delivered'
+                    # For now, we only touch it if it becomes fully returned.
+                    pass
             
             cnx.commit()
             return jsonify({'message': f'Return status updated to {new_status}'}), 200
@@ -1766,12 +1774,30 @@ def get_admin_analytics():
         cursor = cnx.cursor(dictionary=True)
         
         # 1. Total Metrics
+        # Net Revenue = Total Sales (excluding cancelled) - Total Refunds (excluding cancelled)
+        # Net Profit = Total Profit (excluding cancelled) - Total Refunds (excluding cancelled)
         cursor.execute("""
             SELECT 
-                COALESCE(SUM(s.transaction_amount), 0) as total_revenue,
-                COALESCE(SUM(s.profit), 0) as total_profit,
+                COALESCE(SUM(s.transaction_amount), 0) - 
+                COALESCE((
+                    SELECT SUM(r.refund_amount) 
+                    FROM `RETURN` r
+                    JOIN `ORDER` o2 ON r.order_id = o2.order_id
+                    WHERE r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as total_revenue,
+                COALESCE(SUM(s.profit), 0) - 
+                COALESCE((
+                    SELECT SUM(r.refund_amount) 
+                    FROM `RETURN` r
+                    JOIN `ORDER` o2 ON r.order_id = o2.order_id
+                    WHERE r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as total_profit,
                 COUNT(s.sale_id) as total_transactions
             FROM SALE s
+            JOIN `ORDER` o ON s.order_id = o.order_id
+            WHERE o.order_status != 'cancelled'
         """)
         totals = cursor.fetchone()
         
@@ -1782,32 +1808,69 @@ def get_admin_analytics():
         totals['total_expenses'] = float(total_expenses)
         totals['net_income'] = float(totals['total_revenue']) - float(total_expenses)
         
-        # 2. Performance by Branch
+        # 2. Performance by Branch (Net Revenue = Gross - Refunds)
         cursor.execute("""
             SELECT 
                 b.branch_name,
                 COUNT(s.sale_id) as transaction_count,
-                COALESCE(SUM(s.transaction_amount), 0) as revenue,
-                COALESCE(SUM(s.profit), 0) as profit
+                COALESCE(SUM(s.transaction_amount), 0) - 
+                COALESCE((
+                    SELECT SUM(r.refund_amount)
+                    FROM `RETURN` r
+                    JOIN SALE s2 ON r.order_id = s2.order_id
+                    JOIN `ORDER` o2 ON s2.order_id = o2.order_id
+                    WHERE s2.branch_id = b.branch_id 
+                    AND r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as revenue,
+                COALESCE(SUM(s.profit), 0) - 
+                COALESCE((
+                    SELECT SUM(r.refund_amount)
+                    FROM `RETURN` r
+                    JOIN SALE s2 ON r.order_id = s2.order_id
+                    JOIN `ORDER` o2 ON s2.order_id = o2.order_id
+                    WHERE s2.branch_id = b.branch_id 
+                    AND r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as profit
             FROM BRANCH b
-            LEFT JOIN SALE s ON b.branch_id = s.branch_id
+            LEFT JOIN (
+                SELECT s.* 
+                FROM SALE s
+                JOIN `ORDER` o ON s.order_id = o.order_id
+                WHERE o.order_status != 'cancelled'
+            ) s ON b.branch_id = s.branch_id
             GROUP BY b.branch_id, b.branch_name
             ORDER BY revenue DESC
         """)
         branch_performance = cursor.fetchall()
         
-        # 3. Top Selling Products (by quantity sold)
-        # We join ORDER_DETAIL -> PRODUCT to get names and counts
-        # Note: This counts items from all orders, not just those in SALE table (which mirrors orders)
-        # To be strictly accurate, we should only count items from orders that have a corresponding SALE record
+        # 3. Top Selling Products (Net Sales = Ordered - Returned)
         cursor.execute("""
             SELECT 
                 p.product_name,
-                SUM(od.quantity) as total_sold,
-                SUM(od.quantity * od.unit_price) as revenue
+                SUM(od.quantity) - 
+                COALESCE((
+                    SELECT SUM(r.quantity) 
+                    FROM `RETURN` r 
+                    JOIN `ORDER` o2 ON r.order_id = o2.order_id
+                    WHERE r.product_id = p.product_id 
+                    AND r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as total_sold,
+                SUM(od.quantity * od.unit_price) - 
+                COALESCE((
+                    SELECT SUM(r.refund_amount) 
+                    FROM `RETURN` r 
+                    JOIN `ORDER` o2 ON r.order_id = o2.order_id
+                    WHERE r.product_id = p.product_id 
+                    AND r.return_status = 'completed'
+                    AND o2.order_status != 'cancelled'
+                ), 0) as revenue
             FROM ORDER_DETAIL od
             JOIN PRODUCT p ON od.product_id = p.product_id
-            JOIN SALE s ON od.order_id = s.order_id
+            JOIN `ORDER` o ON od.order_id = o.order_id
+            WHERE o.order_status != 'cancelled'
             GROUP BY p.product_id, p.product_name
             ORDER BY total_sold DESC
             LIMIT 5
