@@ -1958,7 +1958,7 @@ def update_return_status(return_id):
         data = request.json
         new_status = data.get("status")
 
-        if new_status not in ["approved", "rejected", "completed"]:
+        if new_status not in ["pending", "approved", "rejected", "completed"]:
             return jsonify({"error": "Invalid status"}), 400
 
         cnx = get_db_connection()
@@ -1984,6 +1984,8 @@ def update_return_status(return_id):
 
             if new_status == "completed":
                 update_query += ", refund_date = NOW()"
+            elif new_status == "pending":
+                update_query += ", refund_date = NULL"
 
             update_query += " WHERE return_id = %s"
             params.append(return_id)
