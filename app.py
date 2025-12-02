@@ -874,12 +874,13 @@ def record_offline_sale():
             """, (quantity, product_id, branch_id))
             
             # 6. Record Sale (Financial Record)
-            estimated_profit = transaction_amount * 0.3 
+            # BCNF: We store cost, profit is calculated via VIEW_SALE_WITH_PROFIT
+            estimated_cost = transaction_amount * 0.7  # 70% cost, 30% margin
             
             cursor.execute("""
-                INSERT INTO SALE (branch_id, order_id, sale_date, transaction_amount, profit, sale_type)
+                INSERT INTO SALE (branch_id, order_id, sale_date, transaction_amount, cost, sale_type)
                 VALUES (%s, %s, NOW(), %s, %s, 'in-store')
-            """, (branch_id, order_id, transaction_amount, estimated_profit))
+            """, (branch_id, order_id, transaction_amount, estimated_cost))
             
             cnx.commit()
             
@@ -1217,21 +1218,19 @@ def create_order():
                 ))
             
             # 5. Record Sale (Revenue Recognition)
-            # Calculate financials
+            # Calculate financials - BCNF: profit is calculated via VIEW_SALE_WITH_PROFIT
             total_amount = float(data['total_amount'])
-            cost = total_amount * 0.65 # Simulated cost
-            profit = total_amount - cost
+            cost = total_amount * 0.65 # Simulated cost (65%)
             
             cursor.execute("""
                 INSERT INTO SALE 
-                (customer_id, order_id, branch_id, transaction_date, transaction_amount, cost, profit, sale_type)
-                VALUES (%s, %s, NULL, NOW(), %s, %s, %s, 'online')
+                (customer_id, order_id, branch_id, transaction_date, transaction_amount, cost, sale_type)
+                VALUES (%s, %s, NULL, NOW(), %s, %s, 'online')
             """, (
                 data['customer_id'],
                 order_id,
                 total_amount,
-                cost,
-                profit
+                cost
             ))
             
             # Clear cart
@@ -1804,7 +1803,7 @@ def get_admin_analytics():
         
         # 1. Total Metrics
         # Net Revenue = Total Sales (excluding cancelled) - Total Refunds (excluding cancelled)
-        # Net Profit = Total Profit (excluding cancelled) - Total Refunds (excluding cancelled)
+        # Net Profit = (transaction_amount - cost) calculated on-the-fly (BCNF compliance)
         cursor.execute("""
             SELECT 
                 COALESCE(SUM(s.transaction_amount), 0) - 
@@ -1815,7 +1814,7 @@ def get_admin_analytics():
                     WHERE r.return_status = 'completed'
                     AND o2.order_status != 'cancelled'
                 ), 0) as total_revenue,
-                COALESCE(SUM(s.profit), 0) - 
+                COALESCE(SUM(s.transaction_amount - s.cost), 0) - 
                 COALESCE((
                     SELECT SUM(r.refund_amount) 
                     FROM `RETURN` r
@@ -1830,14 +1829,15 @@ def get_admin_analytics():
         """)
         totals = cursor.fetchone()
         
-        # Calculate Expenses (Total Cost of Purchases)
-        cursor.execute("SELECT COALESCE(SUM(total_cost), 0) as total_expenses FROM PURCHASE")
+        # Calculate Expenses (Total Cost of Purchases) - using VIEW for BCNF compliance
+        cursor.execute("SELECT COALESCE(SUM(quantity * unit_cost), 0) as total_expenses FROM PURCHASE")
         total_expenses = cursor.fetchone()['total_expenses']
         
         totals['total_expenses'] = float(total_expenses)
         totals['net_income'] = float(totals['total_revenue']) - float(total_expenses)
         
         # 2. Performance by Branch (Net Revenue = Gross - Refunds)
+        # BCNF: profit calculated as (transaction_amount - cost)
         cursor.execute("""
             SELECT 
                 b.branch_name,
@@ -1852,7 +1852,7 @@ def get_admin_analytics():
                     AND r.return_status = 'completed'
                     AND o2.order_status != 'cancelled'
                 ), 0) as revenue,
-                COALESCE(SUM(s.profit), 0) - 
+                COALESCE(SUM(s.transaction_amount - s.cost), 0) - 
                 COALESCE((
                     SELECT SUM(r.refund_amount)
                     FROM `RETURN` r
@@ -1967,11 +1967,11 @@ def restock_inventory():
         cursor = cnx.cursor()
         
         try:
-            # 1. Record Purchase
+            # 1. Record Purchase (BCNF: total_cost calculated via VIEW_PURCHASE_WITH_TOTAL)
             cursor.execute("""
-                INSERT INTO PURCHASE (supplier_id, product_id, quantity, unit_cost, total_cost, payment_status, transaction_date)
-                VALUES (%s, %s, %s, %s, %s, 'pending', NOW())
-            """, (supplier_id, product_id, quantity, unit_cost, quantity * unit_cost))
+                INSERT INTO PURCHASE (supplier_id, product_id, quantity, unit_cost, payment_status, transaction_date)
+                VALUES (%s, %s, %s, %s, 'pending', NOW())
+            """, (supplier_id, product_id, quantity, unit_cost))
             
             # 2. Update Inventory
             # Check if inventory record exists

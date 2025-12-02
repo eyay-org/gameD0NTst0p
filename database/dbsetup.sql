@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS `REVIEW` (
   CONSTRAINT `chk_rating` CHECK (`rating` >= 1 AND `rating` <= 5)
 );
 
--- PURCHASE Table
+-- PURCHASE Table (BCNF Compliant - no derived columns)
 CREATE TABLE IF NOT EXISTS `PURCHASE` (
   `purchase_id` INT NOT NULL AUTO_INCREMENT,
   `supplier_id` INT,
@@ -212,7 +212,6 @@ CREATE TABLE IF NOT EXISTS `PURCHASE` (
   `transaction_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `quantity` INT,
   `unit_cost` DECIMAL(10, 2),
-  `total_cost` DECIMAL(10, 2),
   `payment_status` VARCHAR(20),
   `payment_date` DATE,
   `invoice_no` VARCHAR(50),
@@ -286,7 +285,7 @@ CREATE TABLE IF NOT EXISTS `RETURN` (
   CONSTRAINT `chk_return_quantity` CHECK (`quantity` > 0)
 );
 
--- SALE Table
+-- SALE Table (BCNF Compliant - no derived columns)
 CREATE TABLE IF NOT EXISTS `SALE` (
   `sale_id` INT NOT NULL AUTO_INCREMENT,
   `customer_id` INT,
@@ -295,7 +294,6 @@ CREATE TABLE IF NOT EXISTS `SALE` (
   `transaction_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `transaction_amount` DECIMAL(10, 2),
   `cost` DECIMAL(10, 2),
-  `profit` DECIMAL(10, 2),
   `sale_type` VARCHAR(20),
   `sale_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`sale_id`),
@@ -402,6 +400,38 @@ FROM INVENTORY i
 JOIN PRODUCT p ON i.product_id = p.product_id
 JOIN BRANCH b ON i.branch_id = b.branch_id
 WHERE i.quantity <= i.minimum_stock;
+
+-- VIEW 4: VIEW_PURCHASE_WITH_TOTAL
+-- PURCHASE tablosu için hesaplanmış total_cost sütunu (BCNF uyumluluğu için)
+CREATE OR REPLACE VIEW VIEW_PURCHASE_WITH_TOTAL AS
+SELECT 
+    purchase_id,
+    supplier_id,
+    product_id,
+    transaction_date,
+    quantity,
+    unit_cost,
+    (quantity * unit_cost) AS total_cost,
+    payment_status,
+    payment_date,
+    invoice_no
+FROM PURCHASE;
+
+-- VIEW 5: VIEW_SALE_WITH_PROFIT
+-- SALE tablosu için hesaplanmış profit sütunu (BCNF uyumluluğu için)
+CREATE OR REPLACE VIEW VIEW_SALE_WITH_PROFIT AS
+SELECT 
+    sale_id,
+    customer_id,
+    order_id,
+    branch_id,
+    transaction_date,
+    transaction_amount,
+    cost,
+    (transaction_amount - cost) AS profit,
+    sale_type,
+    sale_date
+FROM SALE;
 
 -- ============================================================================
 -- SIRA 5: TRIGGERS & LOGS (OTOMASYON)
