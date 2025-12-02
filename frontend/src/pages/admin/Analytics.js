@@ -29,8 +29,8 @@ const Analytics = () => {
 
     return (
         <div className="analytics-dashboard">
-            <div className="dashboard-header">
-                <h1>📊 EXECUTIVE DASHBOARD</h1>
+            <div className="admin-page-header">
+                <h1 className="admin-title">EXECUTIVE DASHBOARD</h1>
             </div>
 
             {/* KPI Cards */}
@@ -63,10 +63,10 @@ const Analytics = () => {
 
             <div className="dashboard-grid">
                 {/* Branch Performance */}
-                <div className="dashboard-section">
-                    <h2>🏢 BRANCH PERFORMANCE</h2>
+                <div className="dashboard-section admin-card">
+                    <h2>Branch Performance</h2>
                     <div className="table-container">
-                        <table className="pixel-table">
+                        <table className="admin-table">
                             <thead>
                                 <tr>
                                     <th>BRANCH</th>
@@ -90,10 +90,10 @@ const Analytics = () => {
                 </div>
 
                 {/* Top Products */}
-                <div className="dashboard-section">
-                    <h2>🏆 TOP SELLING PRODUCTS</h2>
+                <div className="dashboard-section admin-card">
+                    <h2>Top Selling Products</h2>
                     <div className="table-container">
-                        <table className="pixel-table">
+                        <table className="admin-table">
                             <thead>
                                 <tr>
                                     <th>PRODUCT</th>

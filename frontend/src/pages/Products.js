@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -16,6 +16,7 @@ const Products = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
+  const [filtersVisible, setFiltersVisible] = useState(true);
 
   // Initialize filters from URL params
   const [filters, setFilters] = useState({
@@ -78,6 +79,11 @@ const Products = () => {
     setError(null);
   };
 
+  const toggleFilters = useCallback((e) => {
+    e?.stopPropagation();
+    setFiltersVisible(prev => !prev);
+  }, []);
+
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setFilters(prev => ({ ...prev, page: newPage }));
@@ -121,15 +127,60 @@ const Products = () => {
   return (
     <div className="products-page">
       <div className="container">
-        <h1 className="page-title">🛒 PRODUCTS</h1>
+        <div className="page-header">
+          <h1 className="page-title">Products</h1>
+        </div>
 
         <div className="filters-section">
+          <div className="filters-header">
+            <button
+              className="filters-toggle"
+              onClick={toggleFilters}
+              aria-expanded={filtersVisible}
+              aria-label={filtersVisible ? 'Hide filters' : 'Show filters'}
+              type="button"
+            >
+              <span className="filters-title">Filters</span>
+              <span className="toggle-icon" aria-hidden="true">{filtersVisible ? '−' : '+'}</span>
+            </button>
+            
+            {/* View Toggle - Always Visible */}
+            <div className="view-toggle">
+              <button
+                className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewMode('grid');
+                }}
+                aria-label="Grid View"
+                aria-pressed={viewMode === 'grid'}
+                type="button"
+              >
+                <span aria-hidden="true">⊞</span>
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setViewMode('list');
+                }}
+                aria-label="List View"
+                aria-pressed={viewMode === 'list'}
+                type="button"
+              >
+                <span aria-hidden="true">☰</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className={`filters-content ${filtersVisible ? 'visible' : 'hidden'}`}>
           <div className="filter-group">
-            <label>SEARCH:</label>
+            <label htmlFor="search-input">Search</label>
             <input
+              id="search-input"
               type="text"
               className="pixel-input"
-              placeholder="SEARCH PRODUCTS..."
+              placeholder="Search products..."
               value={filters.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
             />
@@ -137,15 +188,16 @@ const Products = () => {
 
           {/* TYPE FILTER */}
           <div className="filter-group">
-            <label>TYPE:</label>
+            <label htmlFor="type-select">Type</label>
             <select
+              id="type-select"
               className="pixel-input"
               value={filters.type}
               onChange={(e) => handleFilterChange('type', e.target.value)}
             >
-              <option value="">ALL</option>
-              <option value="game">GAMES</option>
-              <option value="console">CONSOLES</option>
+              <option value="">All</option>
+              <option value="game">Games</option>
+              <option value="console">Consoles</option>
             </select>
           </div>
 
@@ -153,13 +205,14 @@ const Products = () => {
           {(filters.type === 'game' || filters.type === '') && (
             <>
               <div className="filter-group">
-                <label>PLATFORM:</label>
+                <label htmlFor="platform-select">Platform</label>
                 <select
+                  id="platform-select"
                   className="pixel-input"
                   value={filters.platform}
                   onChange={(e) => handleFilterChange('platform', e.target.value)}
                 >
-                  <option value="">ALL PLATFORMS</option>
+                  <option value="">All Platforms</option>
                   {platforms.map((platform, idx) => (
                     <option key={idx} value={platform}>
                       {platform}
@@ -169,13 +222,14 @@ const Products = () => {
               </div>
 
               <div className="filter-group">
-                <label>GENRE:</label>
+                <label htmlFor="genre-select">Genre</label>
                 <select
+                  id="genre-select"
                   className="pixel-input"
                   value={filters.genre}
                   onChange={(e) => handleFilterChange('genre', e.target.value)}
                 >
-                  <option value="">ALL GENRES</option>
+                  <option value="">All Genres</option>
                   {genres.map(genre => (
                     <option key={genre.genre_id} value={genre.genre_name}>
                       {genre.genre_name}
@@ -185,24 +239,25 @@ const Products = () => {
               </div>
 
               <div className="filter-group">
-                <label>RATING:</label>
+                <label htmlFor="rating-select">Rating</label>
                 <select
+                  id="rating-select"
                   className="pixel-input"
                   value={filters.min_rating}
                   onChange={(e) => handleFilterChange('min_rating', e.target.value)}
                 >
-                  <option value="">ANY RATING</option>
-                  <option value="4">4+ STARS</option>
-                  <option value="3">3+ STARS</option>
-                  <option value="2">2+ STARS</option>
+                  <option value="">Any Rating</option>
+                  <option value="4">4+ Stars</option>
+                  <option value="3">3+ Stars</option>
+                  <option value="2">2+ Stars</option>
                 </select>
               </div>
 
               <div className="filter-group">
-                <label>ESRB RATING:</label>
+                <label className="filter-label">ESRB Rating</label>
                 <div className="checkbox-list">
                   {['EC', 'E', 'E10+', 'T', 'M', 'AO', 'RP'].map(rating => (
-                    <label key={rating} className="checkbox-label small">
+                    <label key={rating} className="checkbox-label">
                       <input
                         type="checkbox"
                         checked={filters.esrb ? filters.esrb.split(',').includes(rating) : false}
@@ -230,7 +285,7 @@ const Products = () => {
                     checked={filters.multiplayer}
                     onChange={(e) => handleFilterChange('multiplayer', e.target.checked)}
                   />
-                  MULTIPLAYER ONLY
+                  Multiplayer Only
                 </label>
               </div>
             </>
@@ -240,13 +295,14 @@ const Products = () => {
           {filters.type === 'console' && (
             <>
               <div className="filter-group">
-                <label>MANUFACTURER:</label>
+                <label htmlFor="manufacturer-select">Manufacturer</label>
                 <select
+                  id="manufacturer-select"
                   className="pixel-input"
                   value={filters.manufacturer || ''}
                   onChange={(e) => handleFilterChange('manufacturer', e.target.value)}
                 >
-                  <option value="">ALL MANUFACTURERS</option>
+                  <option value="">All Manufacturers</option>
                   <option value="Sony">Sony (PlayStation)</option>
                   <option value="Microsoft">Microsoft (Xbox)</option>
                   <option value="Nintendo">Nintendo</option>
@@ -254,13 +310,14 @@ const Products = () => {
               </div>
 
               <div className="filter-group">
-                <label>STORAGE:</label>
+                <label htmlFor="storage-select">Storage</label>
                 <select
+                  id="storage-select"
                   className="pixel-input"
                   value={filters.storage || ''}
                   onChange={(e) => handleFilterChange('storage', e.target.value)}
                 >
-                  <option value="">ANY STORAGE</option>
+                  <option value="">Any Storage</option>
                   <option value="500GB">500GB</option>
                   <option value="1TB">1TB</option>
                   <option value="2TB">2TB</option>
@@ -268,13 +325,14 @@ const Products = () => {
               </div>
 
               <div className="filter-group">
-                <label>COLOR:</label>
+                <label htmlFor="color-select">Color</label>
                 <select
+                  id="color-select"
                   className="pixel-input"
                   value={filters.color || ''}
                   onChange={(e) => handleFilterChange('color', e.target.value)}
                 >
-                  <option value="">ANY COLOR</option>
+                  <option value="">Any Color</option>
                   <option value="Black">Black</option>
                   <option value="White">White</option>
                   <option value="Grey">Grey</option>
@@ -286,20 +344,22 @@ const Products = () => {
           )}
 
           <div className="filter-group">
-            <label>PRICE RANGE:</label>
+            <label htmlFor="price-min">Price Range</label>
             <div className="price-inputs">
               <input
+                id="price-min"
                 type="number"
                 className="pixel-input"
-                placeholder="MIN"
+                placeholder="Min"
                 value={filters.min_price}
                 onChange={(e) => handleFilterChange('min_price', e.target.value)}
               />
-              <span className="separator">-</span>
+              <span className="separator" aria-hidden="true">-</span>
               <input
+                id="price-max"
                 type="number"
                 className="pixel-input"
-                placeholder="MAX"
+                placeholder="Max"
                 value={filters.max_price}
                 onChange={(e) => handleFilterChange('max_price', e.target.value)}
               />
@@ -307,94 +367,61 @@ const Products = () => {
           </div>
 
           <div className="filter-group">
-            <label>SORT BY:</label>
+            <label htmlFor="sort-select">Sort By</label>
             <select
+              id="sort-select"
               className="pixel-input"
               value={filters.sort_by}
               onChange={(e) => handleFilterChange('sort_by', e.target.value)}
             >
-              <option value="name_asc">NAME: A-Z</option>
-              <option value="newest">NEWEST</option>
-              <option value="oldest">OLDEST</option>
-              <option value="price_asc">PRICE: LOW TO HIGH</option>
-              <option value="price_desc">PRICE: HIGH TO LOW</option>
-              <option value="rating_desc">RATING: HIGH TO LOW</option>
-              <option value="rating_asc">RATING: LOW TO HIGH</option>
+              <option value="name_asc">Name: A-Z</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="rating_desc">Rating: High to Low</option>
+              <option value="rating_asc">Rating: Low to High</option>
             </select>
-          </div>
-
-          <div className="filter-group view-toggle-group">
-            <label>VIEW:</label>
-            <div className="view-toggle">
-              <button
-                className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setViewMode('grid')}
-                title="Grid View"
-              >
-                ⊞ GRID
-              </button>
-              <button
-                className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-                onClick={() => setViewMode('list')}
-                title="List View"
-              >
-                ☰ LIST
-              </button>
             </div>
           </div>
         </div>
 
         {/* Active Filters Feedback */}
-        {(filters.genre || filters.platform || filters.min_rating || filters.multiplayer) && (
-          <div className="active-filters" style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 'bold', alignSelf: 'center' }}>FILTERING BY:</span>
+        {(filters.genre || filters.platform || filters.min_rating || filters.multiplayer || filters.esrb) && (
+          <div className="active-filters">
+            <span className="active-filters-label">Active Filters:</span>
             {filters.genre && (
-              <button
-                className="pixel-button small"
-                onClick={() => handleFilterChange('genre', '')}
-                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-              >
-                GENRE: {filters.genre} ✖
-              </button>
+              <span className="filter-chip" onClick={() => handleFilterChange('genre', '')}>
+                Genre: {filters.genre}
+                <span className="close">×</span>
+              </span>
             )}
             {filters.platform && (
-              <button
-                className="pixel-button small"
-                onClick={() => handleFilterChange('platform', '')}
-                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-              >
-                PLATFORM: {filters.platform} ✖
-              </button>
+              <span className="filter-chip" onClick={() => handleFilterChange('platform', '')}>
+                Platform: {filters.platform}
+                <span className="close">×</span>
+              </span>
             )}
             {filters.min_rating && (
-              <button
-                className="pixel-button small"
-                onClick={() => handleFilterChange('min_rating', '')}
-                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-              >
-                {filters.min_rating}+ STARS ✖
-              </button>
+              <span className="filter-chip" onClick={() => handleFilterChange('min_rating', '')}>
+                {filters.min_rating}+ Stars
+                <span className="close">×</span>
+              </span>
             )}
             {filters.multiplayer && (
-              <button
-                className="pixel-button small"
-                onClick={() => handleFilterChange('multiplayer', false)}
-                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-              >
-                MULTIPLAYER ✖
-              </button>
+              <span className="filter-chip" onClick={() => handleFilterChange('multiplayer', false)}>
+                Multiplayer
+                <span className="close">×</span>
+              </span>
             )}
             {filters.esrb && (
-              <button
-                className="pixel-button small"
-                onClick={() => handleFilterChange('esrb', '')}
-                style={{ fontSize: '0.8rem', padding: '5px 10px' }}
-              >
-                ESRB: {filters.esrb} ✖
-              </button>
+              <span className="filter-chip" onClick={() => handleFilterChange('esrb', '')}>
+                ESRB: {filters.esrb}
+                <span className="close">×</span>
+              </span>
             )}
             <button
-              className="pixel-button small danger"
+              className="clear-all-btn"
               onClick={() => setFilters({
                 type: '',
                 genre: '',
@@ -404,11 +431,11 @@ const Products = () => {
                 sort_by: 'newest',
                 platform: '',
                 min_rating: '',
-                multiplayer: false
+                multiplayer: false,
+                esrb: ''
               })}
-              style={{ fontSize: '0.8rem', padding: '5px 10px', marginLeft: 'auto' }}
             >
-              CLEAR ALL
+              Clear All
             </button>
           </div>
         )}

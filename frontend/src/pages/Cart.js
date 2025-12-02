@@ -79,20 +79,24 @@ const Cart = () => {
   return (
     <div className="cart-page">
       <div className="container">
-        <h1 className="page-title">🛒 YOUR CART</h1>
+        <div className="cart-header">
+          <h1 className="page-title">🛒 YOUR CART</h1>
+        </div>
 
         {cartItems.length === 0 ? (
           <div className="empty-cart">
-            <p>YOUR CART IS EMPTY</p>
+            <div className="empty-cart-icon">🛒</div>
+            <h3>Your Cart is Empty</h3>
+            <p>Looks like you haven't added any games to your cart yet. Let's find something amazing!</p>
             <button 
               className="pixel-button"
               onClick={() => navigate('/products')}
             >
-              SHOP NOW
+              🎨 Shop Now
             </button>
           </div>
         ) : (
-          <>
+          <div className="cart-content">
             <div className="cart-items">
               {cartItems.map(item => (
                 <div key={item.product_id} className="cart-item">
@@ -101,7 +105,7 @@ const Cart = () => {
                     alt={item.product_name}
                     className="cart-item-image"
                     onError={(e) => {
-                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%234a90e2" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="white" font-family="monospace" font-size="20"%3E🎮%3C/text%3E%3C/svg%3E';
+                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%232d5a4a;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%231a3a2f;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="url(%23grad)" width="400" height="500"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23faf6f0" font-family="Georgia, serif" font-size="60"%3E🎮%3C/text%3E%3C/svg%3E';
                     }}
                   />
                   <div className="cart-item-info">
@@ -112,14 +116,14 @@ const Cart = () => {
                   <div className="cart-item-controls">
                     <div className="quantity-controls">
                       <button
-                        className="pixel-button quantity-btn"
+                        className="quantity-btn"
                         onClick={() => handleUpdateQuantity(item.product_id, item.quantity - 1)}
                       >
-                        -
+                        −
                       </button>
                       <span className="quantity-display">{item.quantity}</span>
                       <button
-                        className="pixel-button quantity-btn"
+                        className="quantity-btn"
                         onClick={() => handleUpdateQuantity(item.product_id, item.quantity + 1)}
                       >
                         +
@@ -129,10 +133,10 @@ const Cart = () => {
                       ${(parseFloat(item.price) * item.quantity).toFixed(2)}
                     </div>
                     <button
-                      className="pixel-button secondary remove-btn"
+                      className="remove-btn"
                       onClick={() => handleRemoveItem(item.product_id)}
                     >
-                      REMOVE
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -140,26 +144,27 @@ const Cart = () => {
             </div>
 
             <div className="cart-summary">
+              <h3>Order Summary</h3>
               <div className="summary-row">
-                <span>SUBTOTAL:</span>
+                <span>Subtotal:</span>
                 <span>${calculateTotal().toFixed(2)}</span>
               </div>
               <div className="summary-row">
-                <span>SHIPPING:</span>
+                <span>Shipping:</span>
                 <span>$10.00</span>
               </div>
               <div className="summary-row total">
-                <span>TOTAL:</span>
+                <span>Total:</span>
                 <span>${(calculateTotal() + 10).toFixed(2)}</span>
               </div>
               <button 
-                className="pixel-button success checkout-btn"
+                className="checkout-btn"
                 onClick={handleCheckout}
               >
-                PROCEED TO CHECKOUT
+                Proceed to Checkout
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

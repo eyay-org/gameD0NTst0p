@@ -110,13 +110,13 @@ const Checkout = () => {
     return (
       <div className="checkout-page">
         <div className="container">
-          <div className="empty-checkout">
-            <p>NO ITEMS TO CHECKOUT</p>
+            <div className="empty-checkout">
+            <p>No items to checkout</p>
             <button
               className="pixel-button"
               onClick={() => navigate('/cart')}
             >
-              GO TO CART
+              Go to Cart
             </button>
           </div>
         </div>
@@ -127,23 +127,28 @@ const Checkout = () => {
   return (
     <div className="checkout-page">
       <div className="container">
-        <h1 className="page-title">💳 CHECKOUT</h1>
+        <div className="checkout-header">
+          <h1 className="page-title">Checkout</h1>
+        </div>
 
         <div className="checkout-content">
           <form onSubmit={handleSubmit} className="checkout-form">
-            <div className="form-section">
-              <h2>DELIVERY ADDRESS</h2>
+            <div className="form-section checkout-section">
+              <h2>
+                <span className="section-number">1</span>
+                Delivery Address
+              </h2>
 
               {savedAddresses.length > 0 && (
                 <div className="form-group">
-                  <label style={{ color: '#4ade80' }}>SELECT SAVED ADDRESS:</label>
+                  <label htmlFor="delivery-address-select">Select Saved Address</label>
                   <select
-                    className="pixel-input"
+                    id="delivery-address-select"
+                    className="form-input"
                     value={selectedDeliveryId}
                     onChange={(e) => handleAddressSelect('delivery', e.target.value)}
-                    style={{ marginBottom: '15px', borderColor: '#4ade80' }}
                   >
-                    <option value="new">-- Enter New Address --</option>
+                    <option value="new">Enter New Address</option>
                     {savedAddresses.map(addr => (
                       <option key={addr.address_id} value={addr.address_id}>
                         {addr.address_type} - {addr.city}
@@ -154,46 +159,51 @@ const Checkout = () => {
               )}
 
               <div className="form-group">
-                <label>CITY:</label>
+                <label htmlFor="delivery-city">City</label>
                 <input
+                  id="delivery-city"
                   type="text"
                   name="delivery_city"
-                  className="pixel-input"
+                  className="form-input"
                   value={formData.delivery_city}
                   onChange={handleChange}
                   required
                   readOnly={selectedDeliveryId !== 'new'}
-                  style={{ opacity: selectedDeliveryId !== 'new' ? 0.7 : 1 }}
+                  disabled={selectedDeliveryId !== 'new'}
                 />
               </div>
               <div className="form-group">
-                <label>FULL ADDRESS:</label>
+                <label htmlFor="delivery-address">Full Address</label>
                 <textarea
+                  id="delivery-address"
                   name="delivery_address"
-                  className="pixel-input"
+                  className="form-input"
                   rows="3"
                   value={formData.delivery_address}
                   onChange={handleChange}
                   required
                   readOnly={selectedDeliveryId !== 'new'}
-                  style={{ opacity: selectedDeliveryId !== 'new' ? 0.7 : 1 }}
+                  disabled={selectedDeliveryId !== 'new'}
                 />
               </div>
             </div>
 
-            <div className="form-section">
-              <h2>BILLING ADDRESS</h2>
+            <div className="form-section checkout-section">
+              <h2>
+                <span className="section-number">2</span>
+                Billing Address
+              </h2>
 
               {savedAddresses.length > 0 && (
                 <div className="form-group">
-                  <label style={{ color: '#4ade80' }}>SELECT SAVED ADDRESS:</label>
+                  <label htmlFor="billing-address-select">Select Saved Address</label>
                   <select
-                    className="pixel-input"
+                    id="billing-address-select"
+                    className="form-input"
                     value={selectedBillingId}
                     onChange={(e) => handleAddressSelect('billing', e.target.value)}
-                    style={{ marginBottom: '15px', borderColor: '#4ade80' }}
                   >
-                    <option value="new">-- Enter New Address --</option>
+                    <option value="new">Enter New Address</option>
                     {savedAddresses.map(addr => (
                       <option key={addr.address_id} value={addr.address_id}>
                         {addr.address_type} - {addr.city}
@@ -204,81 +214,97 @@ const Checkout = () => {
               )}
 
               <div className="form-group">
-                <label>CITY:</label>
+                <label htmlFor="billing-city">City</label>
                 <input
+                  id="billing-city"
                   type="text"
                   name="billing_city"
-                  className="pixel-input"
+                  className="form-input"
                   value={formData.billing_city}
                   onChange={handleChange}
                   required
                   readOnly={selectedBillingId !== 'new'}
-                  style={{ opacity: selectedBillingId !== 'new' ? 0.7 : 1 }}
+                  disabled={selectedBillingId !== 'new'}
                 />
               </div>
               <div className="form-group">
-                <label>FULL ADDRESS:</label>
+                <label htmlFor="billing-address">Full Address</label>
                 <textarea
+                  id="billing-address"
                   name="billing_address"
-                  className="pixel-input"
+                  className="form-input"
                   rows="3"
                   value={formData.billing_address}
                   onChange={handleChange}
                   required
                   readOnly={selectedBillingId !== 'new'}
-                  style={{ opacity: selectedBillingId !== 'new' ? 0.7 : 1 }}
+                  disabled={selectedBillingId !== 'new'}
                 />
               </div>
             </div>
 
-            <div className="form-section">
-              <h2>PAYMENT METHOD</h2>
+            <div className="form-section checkout-section">
+              <h2>
+                <span className="section-number">3</span>
+                Payment Method
+              </h2>
               <div className="form-group">
+                <label htmlFor="payment-method">Payment Method</label>
                 <select
+                  id="payment-method"
                   name="payment_method"
-                  className="pixel-input"
+                  className="form-input"
                   value={formData.payment_method}
                   onChange={handleChange}
                 >
-                  <option value="credit_card">CREDIT CARD</option>
-                  <option value="debit_card">DEBIT CARD</option>
-                  <option value="paypal">PAYPAL</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="debit_card">Debit Card</option>
+                  <option value="paypal">PayPal</option>
                 </select>
               </div>
             </div>
 
             <button
               type="submit"
-              className="pixel-button success checkout-submit"
+              className="place-order-btn"
               disabled={loading}
             >
-              {loading ? 'PLACING ORDER...' : 'PLACE ORDER'}
+              {loading ? 'Placing Order...' : 'Place Order'}
             </button>
           </form>
 
           <div className="order-summary">
-            <h2>ORDER SUMMARY</h2>
+            <h2>Order Summary</h2>
             <div className="summary-items">
               {cartItems.map(item => (
                 <div key={item.product_id} className="summary-item">
-                  <span>{item.product_name} x{item.quantity}</span>
-                  <span>${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
+                  <div className="summary-item-info">
+                    <h4>{item.product_name}</h4>
+                    <p>Quantity: {item.quantity}</p>
+                  </div>
+                  <div className="summary-item-price">
+                    ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+                  </div>
                 </div>
               ))}
             </div>
             <div className="summary-totals">
               <div className="summary-row">
-                <span>SUBTOTAL:</span>
+                <span>Subtotal</span>
                 <span>${(calculateTotal() - 10).toFixed(2)}</span>
               </div>
               <div className="summary-row">
-                <span>SHIPPING:</span>
+                <span>Shipping</span>
                 <span>$10.00</span>
               </div>
               <div className="summary-row total">
-                <span>TOTAL:</span>
+                <span>Total</span>
                 <span>${calculateTotal().toFixed(2)}</span>
               </div>
+            </div>
+            <div className="secure-note">
+              <span>🔒</span>
+              <span>Secure checkout</span>
             </div>
           </div>
         </div>
