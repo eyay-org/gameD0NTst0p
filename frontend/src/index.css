@@ -143,3 +143,64 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #5ba0f2;
 }
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  background: #2a2a3e;
+  border: 4px solid #4a90e2;
+  padding: 20px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  animation: modal-pop 0.3s ease-out;
+}
+
+@keyframes modal-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #4a90e2;
+  padding-bottom: 10px;
+}
+
+.modal-header h2 {
+  font-size: 16px;
+  color: #4a90e2;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 24px;
+  cursor: pointer;
+  font-family: 'Press Start 2P', cursive;
+}
+
+.modal-body {
+  margin-top: 10px;
+}

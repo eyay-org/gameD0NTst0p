@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -18,12 +18,54 @@ const Checkout = () => {
     payment_method: 'credit_card',
   });
   const [loading, setLoading] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState('new');
+  const [selectedBillingId, setSelectedBillingId] = useState('new');
+
+  useEffect(() => {
+    if (user) {
+      fetchSavedAddresses();
+    }
+  }, [user]);
+
+  const fetchSavedAddresses = async () => {
+    try {
+      const data = await api.getProfile(user.customer_id);
+      setSavedAddresses(data.addresses);
+    } catch (error) {
+      console.error('Failed to load addresses:', error);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
     });
+  };
+
+  const handleAddressSelect = (type, addressId) => {
+    if (type === 'delivery') {
+      setSelectedDeliveryId(addressId);
+      if (addressId === 'new') {
+        setFormData(prev => ({ ...prev, delivery_city: '', delivery_address: '' }));
+      } else {
+        const addr = savedAddresses.find(a => a.address_id === parseInt(addressId));
+        if (addr) {
+          setFormData(prev => ({ ...prev, delivery_city: addr.city, delivery_address: addr.full_address }));
+        }
+      }
+    } else if (type === 'billing') {
+      setSelectedBillingId(addressId);
+      if (addressId === 'new') {
+        setFormData(prev => ({ ...prev, billing_city: '', billing_address: '' }));
+      } else {
+        const addr = savedAddresses.find(a => a.address_id === parseInt(addressId));
+        if (addr) {
+          setFormData(prev => ({ ...prev, billing_city: addr.city, billing_address: addr.full_address }));
+        }
+      }
+    }
   };
 
   const calculateTotal = () => {
@@ -54,7 +96,11 @@ const Checkout = () => {
       alert('Order placed successfully!');
       navigate('/orders');
     } catch (error) {
-      alert('Failed to place order: ' + error.message);
+      if (error.message.includes('Out of Stock')) {
+        alert('ORDER FAILED: ' + error.message);
+      } else {
+        alert('Failed to place order: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -66,7 +112,7 @@ const Checkout = () => {
         <div className="container">
           <div className="empty-checkout">
             <p>NO ITEMS TO CHECKOUT</p>
-            <button 
+            <button
               className="pixel-button"
               onClick={() => navigate('/cart')}
             >
@@ -87,6 +133,26 @@ const Checkout = () => {
           <form onSubmit={handleSubmit} className="checkout-form">
             <div className="form-section">
               <h2>DELIVERY ADDRESS</h2>
+
+              {savedAddresses.length > 0 && (
+                <div className="form-group">
+                  <label style={{ color: '#4ade80' }}>SELECT SAVED ADDRESS:</label>
+                  <select
+                    className="pixel-input"
+                    value={selectedDeliveryId}
+                    onChange={(e) => handleAddressSelect('delivery', e.target.value)}
+                    style={{ marginBottom: '15px', borderColor: '#4ade80' }}
+                  >
+                    <option value="new">-- Enter New Address --</option>
+                    {savedAddresses.map(addr => (
+                      <option key={addr.address_id} value={addr.address_id}>
+                        {addr.address_type} - {addr.city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>CITY:</label>
                 <input
@@ -96,6 +162,8 @@ const Checkout = () => {
                   value={formData.delivery_city}
                   onChange={handleChange}
                   required
+                  readOnly={selectedDeliveryId !== 'new'}
+                  style={{ opacity: selectedDeliveryId !== 'new' ? 0.7 : 1 }}
                 />
               </div>
               <div className="form-group">
@@ -107,12 +175,34 @@ const Checkout = () => {
                   value={formData.delivery_address}
                   onChange={handleChange}
                   required
+                  readOnly={selectedDeliveryId !== 'new'}
+                  style={{ opacity: selectedDeliveryId !== 'new' ? 0.7 : 1 }}
                 />
               </div>
             </div>
 
             <div className="form-section">
               <h2>BILLING ADDRESS</h2>
+
+              {savedAddresses.length > 0 && (
+                <div className="form-group">
+                  <label style={{ color: '#4ade80' }}>SELECT SAVED ADDRESS:</label>
+                  <select
+                    className="pixel-input"
+                    value={selectedBillingId}
+                    onChange={(e) => handleAddressSelect('billing', e.target.value)}
+                    style={{ marginBottom: '15px', borderColor: '#4ade80' }}
+                  >
+                    <option value="new">-- Enter New Address --</option>
+                    {savedAddresses.map(addr => (
+                      <option key={addr.address_id} value={addr.address_id}>
+                        {addr.address_type} - {addr.city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>CITY:</label>
                 <input
@@ -122,6 +212,8 @@ const Checkout = () => {
                   value={formData.billing_city}
                   onChange={handleChange}
                   required
+                  readOnly={selectedBillingId !== 'new'}
+                  style={{ opacity: selectedBillingId !== 'new' ? 0.7 : 1 }}
                 />
               </div>
               <div className="form-group">
@@ -133,6 +225,8 @@ const Checkout = () => {
                   value={formData.billing_address}
                   onChange={handleChange}
                   required
+                  readOnly={selectedBillingId !== 'new'}
+                  style={{ opacity: selectedBillingId !== 'new' ? 0.7 : 1 }}
                 />
               </div>
             </div>
@@ -153,8 +247,8 @@ const Checkout = () => {
               </div>
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="pixel-button success checkout-submit"
               disabled={loading}
             >

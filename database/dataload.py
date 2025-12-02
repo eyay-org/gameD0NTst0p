@@ -30,12 +30,24 @@ def clear_data(cnx, cursor):
     print("--- Veritabanı Sıfırlanıyor (TRUNCATE) ---")
 
     tables_to_truncate = [
+        "SALE",
+        "RETURN",
+        "PURCHASE",
+        "REVIEW",
+        "CART",
+        "BRANCH",
+        "ORDER_DETAIL",
+        "ORDER",
+        "ADDRESS",
+        "CUSTOMER",
+        "SUPPLIER",
         "GAME_GENRE",
         "GAME",
         "CONSOLE",
         "PRODUCT_MEDIA",
         "PRODUCT",
         "GENRE",
+        "INVENTORY",
     ]
 
     try:
@@ -45,7 +57,7 @@ def clear_data(cnx, cursor):
         for table in tables_to_truncate:
             print(f"  > '{table}' tablosu boşaltılıyor...", end="")
             try:
-                cursor.execute(f"TRUNCATE TABLE {table}")
+                cursor.execute(f"TRUNCATE TABLE `{table}`")
                 print("OK")
             except mysql.connector.Error as err:
                 if err.errno == 1146:  # Hata: Table doesn't exist
@@ -116,19 +128,29 @@ def load_games(cnx, cursor, igdb_genre_map):
     # --- ESRB RATING MAP (Sayıları Metne Çevirmek için) ---
     ESRB_MAP = {6: "RP", 7: "EC", 8: "E", 9: "E10+", 10: "T", 11: "M", 12: "AO"}
 
+    # --- PEGI MAPPING (ESRB Karşılıkları) ---
+    PEGI_TO_ESRB_TEXT = {
+        1: "E",   # PEGI 3
+        2: "E",   # PEGI 7
+        3: "T",   # PEGI 12
+        4: "M",   # PEGI 16
+        5: "M"    # PEGI 18
+    }
+
     # --- DİL TİPİ MAP (Sayıları Metne Çevirmek için) ---
     LANG_SUPPORT_TYPE = {1: "audio", 2: "subtitles", 3: "interface"}
 
-    random_offset = random.randint(0, 1000)
-    print(f"Oyunlar için rastgele 'offset' değeri {random_offset} olarak ayarlandı.")
+    # --- KAPSAMLI API SORGUSU - Popüler oyunları çekiyoruz ---
+    # Rastgelelik eklemek için offset kullanıyoruz (İlk 200 popüler oyun arasından 50 tane seçer)
+    random_offset = random.randint(0, 150)
+    print(f"Popüler oyunlar için rastgele 'offset' değeri {random_offset} olarak ayarlandı.")
 
-    # --- KAPSAMLI API SORGUSU - Tüm mevcut alanları çekiyoruz ---
     api_sorgusu = (
         "fields name, summary, storyline, first_release_date, "
         "platforms.name, platforms.id, "
         "genres, "
         "involved_companies.company.name, involved_companies.developer, involved_companies.publisher, "
-        "age_ratings.rating, age_ratings.category, "
+        "age_ratings.organization, age_ratings.rating_category, "
         "game_modes.name, "
         "language_supports.language.name, language_supports.language_support_type, "
         "cover.url, cover.image_id, "
@@ -136,7 +158,8 @@ def load_games(cnx, cursor, igdb_genre_map):
         "videos.video_id, videos.name, "
         "aggregated_rating, total_rating, rating_count, "
         "websites.url, websites.category; "
-        "where platforms = (48, 49, 130, 6) & first_release_date != null & summary != null; "
+        "where platforms = (48, 49, 130, 6) & first_release_date != null & summary != null & rating_count > 100; "
+        "sort rating_count desc; "
         f"limit 50; offset {random_offset};"
     )
 
@@ -222,21 +245,18 @@ def load_games(cnx, cursor, igdb_genre_map):
 
             # Join platforms and truncate to fit VARCHAR(50) limit
             platform_name = (
-                ", ".join(platform_names[:3]) if platform_names else "Bilinmiyor"
+                ", ".join(platform_names) if platform_names else "Bilinmiyor"
             )
-            if len(platform_name) > 50:
-                # Truncate to fit the column size, try to keep it readable
-                platform_name = platform_name[:47] + "..."
 
-            # Extract ESRB Rating
-            esrb_rating_text = None
-            if "age_ratings" in game:
-                for rating in game["age_ratings"]:
-                    cat_id = rating.get("category")
-                    rating_num = rating.get("rating")
-                    if cat_id == 1:  # 1 = ESRB
-                        esrb_rating_text = ESRB_MAP.get(rating_num)
-                        break
+            # Extract ESRB Rating (Synthetic)
+            # IGDB data is inconsistent, so we use synthetic data for demo purposes
+            POSSIBLE_RATINGS = ['E', 'E10+', 'T', 'M', 'AO', 'RP']
+            # Weighted choice to make T and M more common for a game store
+            esrb_rating_text = random.choices(
+                POSSIBLE_RATINGS, 
+                weights=[20, 15, 30, 30, 2, 3], 
+                k=1
+            )[0]
 
             # Extract Multiplayer info
             multiplayer = False
@@ -360,8 +380,8 @@ def load_product_media(cnx, cursor, games_with_media):
                     # Convert IGDB image URL format
                     if cover_url.startswith("//"):
                         cover_url = "https:" + cover_url
-                        # Upgrade thumbnail size to better quality
-                        cover_url = cover_url.replace("/t_thumb/", "/t_cover_big/")
+                        # Upgrade thumbnail size to better quality (720p for covers)
+                        cover_url = cover_url.replace("/t_thumb/", "/t_720p/")
                     elif not cover_url.startswith("http"):
                         image_id = cover.get("image_id", "")
                         if image_id:
@@ -380,14 +400,14 @@ def load_product_media(cnx, cursor, games_with_media):
                 if screenshot_url:
                     if screenshot_url.startswith("//"):
                         screenshot_url = "https:" + screenshot_url
-                        # Upgrade thumbnail size to better quality
+                        # Upgrade thumbnail size to better quality (1080p for screenshots)
                         screenshot_url = screenshot_url.replace(
-                            "/t_thumb/", "/t_screenshot_big/"
+                            "/t_thumb/", "/t_1080p/"
                         )
                     elif not screenshot_url.startswith("http"):
                         image_id = screenshot.get("image_id", "")
                         if image_id:
-                            screenshot_url = f"https://images.igdb.com/igdb/image/upload/t_screenshot_big/{image_id}.jpg"
+                            screenshot_url = f"https://images.igdb.com/igdb/image/upload/t_1080p/{image_id}.jpg"
 
                     cursor.execute(
                         query_media,
@@ -418,19 +438,103 @@ def load_product_media(cnx, cursor, games_with_media):
 
     print(f"2b. Aşama (Medya) tamamlandı. Toplam {media_count} medya eklendi.\n")
 
+#  CONSOLE_IMAGE_MAP = {
+#         # PlayStation 4 (Wiki Commons)
+#         48: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Sony-PlayStation-4-PS4-Console-FL.png",
+        
+#         # Xbox One (Wiki Commons)
+#         49: "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",
+        
+#         # Nintendo Switch (Wiki Commons)
+#         130: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",
+        
+#         # PlayStation 5 (Wiki Commons)
+#         167: "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",
+        
+#         # Xbox Series X (Wiki Commons)
+#         169: "https://upload.wikimedia.org/wikipedia/commons/2/25/Xbox_Series_X_2_%28transparent_background%29.png",
+        
+#         # PlayStation 3 (Wiki Commons - Slim Model)
+#         9: "https://upload.wikimedia.org/wikipedia/commons/d/d3/PS3Versions.png",
+        
+#         # Xbox 360 (Wiki Commons - S Model)
+#         12: "https://upload.wikimedia.org/wikipedia/commons/6/69/Xbox360.png",
+        
+#         # Wii (Wiki Commons)
+#         5: "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png",
+        
+#         # Wii U (Wiki Commons - Kırık link düzeltildi)
+#         41: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Wii_U_Console_and_Gamepad.png/800px-Wii_U_Console_and_Gamepad.png",
+        
+#         # Nintendo 3DS (Wiki Commons - Kırık link düzeltildi)
+#         37: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Nintendo-3DS-AquaOpen.png/800px-Nintendo-3DS-AquaOpen.png",
+#     }
 
 def load_consoles(cnx, cursor):
     """3. Aşama: Konsolları (PRODUCT ve CONSOLE) yükler."""
     print("3. Aşama: Konsollar IGDB'den çekiliyor...")
 
-    console_ids = "(48, 49, 130, 167, 169)"
+    # Seçtiğimiz Konsol ID'leri
+    console_ids = "(48, 49, 130, 167, 169, 9, 12, 5, 41, 37)"
 
-    # Fetch comprehensive platform data
+    # GÜNCELLENMİŞ HARİTA: Hem Donanım Hem Logo İçeriyor (Wikimedia Commons)
+    CONSOLE_ASSET_MAP = {
+        # PlayStation 5
+        167: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/1/1b/PlayStation_5_and_DualSense_with_transparent_background.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/c/cb/PlayStation_5_logo_and_wordmark.svg"
+        },
+        # PlayStation 4
+        48: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Sony-PlayStation-4-PS4-Console-FL.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/c/c4/PlayStation_4_-_Logo.svg"
+        },
+        # PlayStation 3
+        9: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/d/d3/PS3Versions.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/0/05/PlayStation_3_logo_%282009%29.svg"
+        },
+        # Xbox Series X|S
+        169: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/2/25/Xbox_Series_X_2_%28transparent_background%29.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/a/af/Xbox_Series_X_logo.svg"
+        },
+        # Xbox One
+        49: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Microsoft-Xbox-One-Console-wKinect.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/4/4a/X_Box_One_logo.svg"
+        },
+        # Xbox 360
+        12: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/6/69/Xbox360.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Xbox_360_logo.svg"
+        },
+        # Nintendo Switch
+        130: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/5/5e/Nintendo_Switch_Console.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/d/dc/Nintendo_Switch_logo_transparent_%2B_wordmark.png"
+        },
+        # Wii U
+        41: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Wii_U_Console_and_Gamepad.png/800px-Wii_U_Console_and_Gamepad.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/7/7e/WiiU.svg"
+        },
+        # Wii
+        5: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/8/83/Wii_console.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1c/Wii_logo.png"
+        },
+        # Nintendo 3DS
+        37: {
+            "hardware": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Nintendo-3DS-AquaOpen.png/800px-Nintendo-3DS-AquaOpen.png",
+            "logo": "https://upload.wikimedia.org/wikipedia/commons/8/89/Nintendo_3DS_logo.svg"
+        }
+    }
+
+    # API Sorgusu
     api_sorgusu = (
-        "fields name, summary, platform_logo.url, platform_logo.image_id, "
-        "platform_family.name, category, generation, "
-        "versions.name, versions.summary, "
-        "websites.url, websites.category; "
+        "fields name, summary, platform_family.name, category, generation, "
+        "versions.name, versions.summary; "
         f"where id = {console_ids};"
         "limit 10;"
     )
@@ -461,90 +565,100 @@ def load_consoles(cnx, cursor):
         "VALUES (%s, %s, %s, %s, %s)"
     )
 
-    # Storage capacity mapping based on generation/platform
-    storage_map = {
-        1: "8GB",  # First generation
-        2: "16GB",
-        3: "32GB",
-        4: "64GB",
-        5: "128GB",
-        6: "256GB",
-        7: "512GB",
-        8: "1TB",
-        9: "2TB",
-    }
+    # Define variant options
+    storage_options = ['500GB', '1TB', '2TB']
+    color_options = ['Black', 'White', 'Limited Edition', 'Grey', 'Blue']
 
     for console in console_list:
         try:
-            # --- 1. Verileri Hazırla ---
-            console_name = console.get("name", "İsimsiz Konsol")
+            # --- 1. Verileri Hazırla (Base Data) ---
+            base_name = console.get("name", "İsimsiz Konsol")
             console_summary = console.get("summary", "Açıklama yok.")
             console_brand = console.get("platform_family", {}).get("name", "Bilinmiyor")
-
-            # Try to get generation for storage estimation
-            generation = console.get("generation", 8)  # Default to modern generation
-            storage = storage_map.get(generation, "1TB")
-
-            # Generate price based on generation
-            base_price = 199.99
-            fake_price = round(base_price + (generation * 50), 2)
-
-            fake_release_date = "2020-11-12"
+            generation = console.get("generation", 8)
+            
+            # Base Price calculation
+            base_price = 199.99 + (generation * 50)
+            
+            # Real Release Dates Map
+            RELEASE_DATES = {
+                48: '2013-11-15',  # PS4
+                49: '2013-11-22',  # Xbox One
+                130: '2017-03-03', # Switch
+                167: '2020-11-12', # PS5
+                169: '2020-11-10', # Xbox Series X
+                9: '2006-11-11',   # PS3
+                12: '2005-11-22',  # Xbox 360
+                5: '2006-11-19',   # Wii
+                41: '2012-11-18',  # Wii U
+                37: '2011-02-26'   # 3DS
+            }
+            
+            console_id = int(console.get("id"))
+            fake_release_date = RELEASE_DATES.get(console_id, "2020-11-12")
+            
+            # IGDB'de olmayan varsayılan veriler
             fake_weight = 4.5
             fake_dims = "39x26x10 cm"
-            fake_color = "Black"
             fake_accessories = "Controller, HDMI Cable, Power Cable"
             fake_warranty = 12
 
-            # --- 2. PRODUCT Tablosuna Ekle ---
-            cursor.execute(
-                query_product,
-                (
-                    console_name,
-                    console_summary,
-                    fake_release_date,
-                    fake_price,
-                    console_brand,
-                    fake_weight,
-                    fake_dims,
-                ),
-            )
-            yeni_product_id = cursor.lastrowid
+            # Create 3 Variants for each console
+            for i in range(3):
+                # Randomize attributes
+                storage = random.choice(storage_options)
+                color = random.choice(color_options)
+                
+                # Adjust price based on attributes
+                variant_price = base_price
+                if storage == '1TB': variant_price += 50
+                elif storage == '2TB': variant_price += 100
+                
+                if color == 'Limited Edition': variant_price += 30
+                
+                variant_price = round(variant_price, 2)
+                
+                # Create distinct name
+                console_name = f"{base_name} ({storage} - {color})"
+                
+                # --- 2. PRODUCT Tablosuna Ekle ---
+                cursor.execute(query_product, (
+                    console_name, console_summary, fake_release_date,
+                    variant_price, console_brand, fake_weight, fake_dims
+                ))
+                yeni_product_id = cursor.lastrowid
 
-            # --- 3. CONSOLE Tablosuna Ekle ---
-            cursor.execute(
-                query_console,
-                (
-                    yeni_product_id,
-                    console_brand,
-                    console_name,
-                    storage,
-                    fake_color,
-                    fake_accessories,
-                    fake_warranty,
-                ),
-            )
+                # --- 3. CONSOLE Tablosuna Ekle ---
+                cursor.execute(query_console, (
+                    yeni_product_id, console_brand, base_name, storage,
+                    color, fake_accessories, fake_warranty
+                ))
 
-            # --- 4. Add platform logo as media ---
-            platform_logo = console.get("platform_logo")
-            if platform_logo:
-                logo_url = platform_logo.get("url", "")
-                if logo_url:
-                    if logo_url.startswith("//"):
-                        logo_url = "https:" + logo_url
-                        # Upgrade thumbnail size to better quality
-                        logo_url = logo_url.replace("/t_thumb/", "/t_logo_med/")
-                    elif not logo_url.startswith("http"):
-                        image_id = platform_logo.get("image_id", "")
-                        if image_id:
-                            logo_url = f"https://images.igdb.com/igdb/image/upload/t_logo_med/{image_id}.png"
+                # --- 4. MEDYA YÜKLEME (MANUEL HARİTADAN) ---
+                console_id = int(console.get("id"))
+                
+                # Haritamızda bu konsol var mı?
+                assets = CONSOLE_ASSET_MAP.get(console_id)
+                
+                if assets:
+                    # 4a. Donanım Resmi (Main Image)
+                    hardware_url = assets.get("hardware")
+                    if hardware_url:
+                        cursor.execute(
+                            query_media, (yeni_product_id, "photo", hardware_url, 0, True)
+                        )
+                    
+                    # 4b. Logo Resmi (Secondary Image)
+                    logo_url = assets.get("logo")
+                    if logo_url:
+                        cursor.execute(
+                            query_media, (yeni_product_id, "photo", logo_url, 1, False)
+                        )
+                else:
+                    print(f"  > UYARI: ID {console_id} için görsel haritası bulunamadı.")
 
-                    cursor.execute(
-                        query_media, (yeni_product_id, "photo", logo_url, 0, True)
-                    )
-
-            cnx.commit()
-            print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")
+                cnx.commit()
+                print(f"  > EKLENDİ (CONSOLE - ID: {yeni_product_id}): {console_name}")
 
         except Exception as e:
             print(f"  [X] HATA - {console.get('name', 'Bilinmeyen')}: {e}")

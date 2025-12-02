@@ -35,7 +35,7 @@ NUM_ORDERS = 250
 NUM_ORDER_ITEMS_PER_ORDER = (1, 5)  # Random between 1-5 items per order
 NUM_PURCHASES = 100
 NUM_RETURNS = 30
-NUM_SALES = 200
+NUM_SALES = 250
 INVENTORY_FOR_ALL_PRODUCTS = True  # Generate inventory for all products
 
 
@@ -56,14 +56,38 @@ def load_customers(cnx, cursor):
 
     query = """
         INSERT INTO CUSTOMER 
-        (first_name, last_name, email, password_hash, phone, registration_date, active_status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        (first_name, last_name, email, password_hash, phone, registration_date, active_status, is_admin)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     customer_ids = []
     emails_used = set(existing_emails)  # Start with existing emails
     max_attempts = 10  # Maximum attempts to generate unique email
 
+    # --- Create Admin User First ---
+    admin_email = "admin@gamestore.com"
+    if admin_email not in existing_emails:
+        try:
+            cursor.execute(
+                query,
+                (
+                    "Admin",
+                    "User",
+                    admin_email,
+                    hash_password("admin123"),
+                    fake.phone_number()[:20],
+                    datetime.now().date(),
+                    True,  # active_status
+                    True   # is_admin
+                ),
+            )
+            customer_ids.append(cursor.lastrowid)
+            emails_used.add(admin_email)
+            print("  [OK] Created Admin User: admin@gamestore.com")
+        except mysql.connector.Error as e:
+            print(f"  [X] Error inserting admin user: {e}")
+
+    # --- Generate Random Customers ---
     for i in range(NUM_CUSTOMERS):
         first_name = fake.first_name()
         last_name = fake.last_name()
@@ -86,6 +110,7 @@ def load_customers(cnx, cursor):
         phone = fake.phone_number()[:20]  # Limit to 20 chars
         registration_date = fake.date_between(start_date="-2y", end_date="today")
         active_status = random.choice([True, True, True, False])  # 75% active
+        is_admin = False
 
         try:
             cursor.execute(
@@ -98,6 +123,7 @@ def load_customers(cnx, cursor):
                     phone,
                     registration_date,
                     active_status,
+                    is_admin
                 ),
             )
             customer_ids.append(cursor.lastrowid)
@@ -720,6 +746,20 @@ def load_returns(cnx, cursor, customer_ids, order_ids, product_ids):
                     refund_date.date() if refund_date else None,
                 ),
             )
+            
+            # Check if all items in the order are returned
+            cursor.execute("SELECT COUNT(*) as total_items FROM ORDER_DETAIL WHERE order_id = %s", (order_id,))
+            total_items = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) as returned_items FROM `RETURN` WHERE order_id = %s AND return_status = 'completed'", (order_id,))
+            returned_items = cursor.fetchone()[0]
+            
+            if returned_items >= total_items:
+                cursor.execute(
+                    "UPDATE `ORDER` SET order_status = 'returned' WHERE order_id = %s",
+                    (order_id,)
+                )
+            
             return_count += 1
         except mysql.connector.Error as e:
             print(f"  [X] Error inserting return {i+1}: {e}")
@@ -750,7 +790,6 @@ def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
         """
         SELECT order_id, customer_id, total_amount, order_date
         FROM `ORDER`
-        WHERE order_status IN ('delivered', 'shipped')
         LIMIT 1000
     """
     )

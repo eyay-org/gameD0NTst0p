@@ -10,7 +10,17 @@ import Checkout from './pages/Checkout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Orders from './pages/Orders';
+import Profile from './pages/Profile';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import InventoryManager from './pages/admin/InventoryManager';
+import OrderManager from './pages/admin/OrderManager';
+import Analytics from './pages/admin/Analytics';
+import Branches from './pages/admin/Branches';
+import Returns from './pages/admin/Returns';
 import './App.css';
+
+import AdminRoute from './components/AdminRoute';
 
 function App() {
   return (
@@ -28,6 +38,21 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/orders" element={<Orders />} />
+              <Route path="/profile" element={<Profile />} />
+
+              {/* Admin Routes */}
+              <Route path="/admin" element={
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
+              }>
+                <Route index element={<AdminDashboard />} />
+                <Route path="inventory" element={<InventoryManager />} />
+                <Route path="orders" element={<OrderManager />} />
+                <Route path="returns" element={<Returns />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="branches" element={<Branches />} />
+              </Route>
             </Routes>
           </main>
         </div>

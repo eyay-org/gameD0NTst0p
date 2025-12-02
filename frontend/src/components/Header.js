@@ -19,17 +19,20 @@ const Header = () => {
           <Link to="/" className="logo">
             <span className="logo-text">🎮 GAME STORE</span>
           </Link>
-          
+
           <nav className="nav-menu">
             <Link to="/" className="nav-link">HOME</Link>
             <Link to="/products" className="nav-link">PRODUCTS</Link>
             {user ? (
               <>
+                {user.is_admin && (
+                  <Link to="/admin" className="nav-link admin-link">DASHBOARD</Link>
+                )}
                 <Link to="/cart" className="nav-link">CART</Link>
                 <Link to="/orders" className="nav-link">ORDERS</Link>
-                <span className="nav-link user-name">
+                <Link to="/profile" className="nav-link user-name" style={{ color: '#4ade80', textDecoration: 'none' }}>
                   {user.first_name} {user.last_name}
-                </span>
+                </Link>
                 <button onClick={handleLogout} className="pixel-button secondary">
                   LOGOUT
                 </button>

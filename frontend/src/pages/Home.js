@@ -14,12 +14,12 @@ const Home = () => {
   useEffect(() => {
     const loadProducts = async () => {
       try {
-        const [games, consoles] = await Promise.all([
+        const [gamesResponse, consolesResponse] = await Promise.all([
           api.getProducts({ type: 'game', limit: 6 }),
           api.getProducts({ type: 'console', limit: 3 })
         ]);
-        setFeaturedGames(games);
-        setFeaturedConsoles(consoles);
+        setFeaturedGames(gamesResponse.products);
+        setFeaturedConsoles(consolesResponse.products);
         setError(null);
       } catch (error) {
         console.error('Failed to load products:', error);

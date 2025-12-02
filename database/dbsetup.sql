@@ -17,11 +17,12 @@ CREATE TABLE IF NOT EXISTS `CUSTOMER` (
   `registration_date` DATE,
   `last_login_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `active_status` BOOLEAN DEFAULT TRUE,
+  `is_admin` BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (`customer_id`),
   UNIQUE KEY `uk_email` (`email`)
 );
 
--- PRODUCT Table (Superclass)
+-- PRODUCT Table
 CREATE TABLE IF NOT EXISTS `PRODUCT` (
   `product_id` INT NOT NULL AUTO_INCREMENT,
   `product_name` VARCHAR(200) NOT NULL,
@@ -45,7 +46,6 @@ CREATE TABLE IF NOT EXISTS `SUPPLIER` (
   `supplier_name` VARCHAR(150) NOT NULL,
   `payment_terms` VARCHAR(100),
   `active_status` BOOLEAN DEFAULT TRUE,
-  -- Rapordaki 'contact_info' kompozit alanı düzleştirildi
   `contact_address` TEXT,
   `contact_phone` VARCHAR(20),
   `contact_email` VARCHAR(100),
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `ADDRESS` (
 -- GAME Table (Subclass of PRODUCT)
 CREATE TABLE IF NOT EXISTS `GAME` (
   `product_id` INT NOT NULL,
-  `platform` VARCHAR(50),
+  `platform` VARCHAR(255),
   `developer` VARCHAR(100),
   `publisher` VARCHAR(100),
   `ESRB_rating` VARCHAR(10),
@@ -141,7 +141,6 @@ CREATE TABLE IF NOT EXISTS `ORDER` (
   `tracking_number` VARCHAR(50),
   `estimated_delivery_date` DATE,
   `actual_delivery_date` DATE,
-  -- Rapordaki 'delivery_address' ve 'billing_address' kompozit alanları düzleştirildi
   `delivery_full_address` TEXT,
   `delivery_city` VARCHAR(100),
   `billing_full_address` TEXT,
@@ -298,6 +297,7 @@ CREATE TABLE IF NOT EXISTS `SALE` (
   `cost` DECIMAL(10, 2),
   `profit` DECIMAL(10, 2),
   `sale_type` VARCHAR(20),
+  `sale_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`sale_id`),
   CONSTRAINT `fk_sale_customer`
     FOREIGN KEY (`customer_id`) REFERENCES `CUSTOMER` (`customer_id`)
@@ -331,3 +331,109 @@ CREATE TABLE IF NOT EXISTS `INVENTORY` (
     ON DELETE CASCADE,
   CONSTRAINT `chk_quantity` CHECK (`quantity` >= 0)
 );
+
+-- ============================================================================
+-- SIRA 4: INDEXES & VIEWS (PERFORMANS VE RAPORLAMA)
+-- ============================================================================
+
+-- 4.1 INDEXES (Sorgu Performansı İçin)
+-- Ürün aramaları ve sıralamaları için indeksler
+CREATE INDEX idx_product_name ON PRODUCT(product_name);
+CREATE INDEX idx_product_price ON PRODUCT(price);
+CREATE INDEX idx_product_type ON PRODUCT(product_type);
+
+-- Sipariş sorguları için indeksler
+CREATE INDEX idx_order_date ON `ORDER`(order_date);
+CREATE INDEX idx_order_customer ON `ORDER`(customer_id);
+
+-- Oyun filtreleme için indeks
+CREATE INDEX idx_game_rating ON GAME(ESRB_rating);
+
+-- 4.2 VIEWS (Karmaşık Sorguları Basitleştirmek İçin)
+
+-- VIEW 1: VIEW_PRODUCT_DETAILS
+-- Tüm ürünleri (Game ve Console) tek bir tabloda gibi listeler
+CREATE OR REPLACE VIEW VIEW_PRODUCT_DETAILS AS
+SELECT 
+    p.product_id,
+    p.product_name,
+    p.price,
+    p.product_type,
+    p.brand,
+    p.status,
+    -- Oyun detayları (Varsa)
+    g.platform,
+    g.developer,
+    g.ESRB_rating,
+    -- Konsol detayları (Varsa)
+    c.manufacturer,
+    c.storage_capacity,
+    c.color
+FROM PRODUCT p
+LEFT JOIN GAME g ON p.product_id = g.product_id
+LEFT JOIN CONSOLE c ON p.product_id = c.product_id;
+
+-- VIEW 2: VIEW_ORDER_SUMMARY
+-- Admin paneli için hızlı sipariş özeti
+CREATE OR REPLACE VIEW VIEW_ORDER_SUMMARY AS
+SELECT 
+    o.order_id,
+    o.order_date,
+    o.order_status,
+    o.total_amount,
+    CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
+    c.email,
+    COUNT(od.line_no) as item_count
+FROM `ORDER` o
+JOIN CUSTOMER c ON o.customer_id = c.customer_id
+LEFT JOIN ORDER_DETAIL od ON o.order_id = od.order_id
+GROUP BY o.order_id;
+
+-- VIEW 3: VIEW_LOW_STOCK
+-- Kritik stok seviyesinin altındaki ürünleri listeler
+CREATE OR REPLACE VIEW VIEW_LOW_STOCK AS
+SELECT 
+    i.inventory_id,
+    p.product_name,
+    b.branch_name,
+    i.quantity,
+    i.minimum_stock
+FROM INVENTORY i
+JOIN PRODUCT p ON i.product_id = p.product_id
+JOIN BRANCH b ON i.branch_id = b.branch_id
+WHERE i.quantity <= i.minimum_stock;
+
+-- ============================================================================
+-- SIRA 5: TRIGGERS & LOGS (OTOMASYON)
+-- ============================================================================
+
+-- STOCK_LOG Table
+CREATE TABLE IF NOT EXISTS `STOCK_LOG` (
+  `log_id` INT NOT NULL AUTO_INCREMENT,
+  `product_id` INT NOT NULL,
+  `branch_id` INT NOT NULL,
+  `old_quantity` INT,
+  `new_quantity` INT,
+  `change_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`log_id`),
+  CONSTRAINT `fk_log_product`
+    FOREIGN KEY (`product_id`) REFERENCES `PRODUCT` (`product_id`)
+    ON DELETE CASCADE,
+  CONSTRAINT `fk_log_branch`
+    FOREIGN KEY (`branch_id`) REFERENCES `BRANCH` (`branch_id`)
+    ON DELETE CASCADE
+);
+
+-- TRIGGER: after_inventory_update
+-- Stok değiştiğinde otomatik loglama yapar
+DELIMITER //
+CREATE TRIGGER after_inventory_update
+AFTER UPDATE ON INVENTORY
+FOR EACH ROW
+BEGIN
+    IF OLD.quantity != NEW.quantity THEN
+        INSERT INTO STOCK_LOG (product_id, branch_id, old_quantity, new_quantity, change_date)
+        VALUES (NEW.product_id, NEW.branch_id, OLD.quantity, NEW.quantity, NOW());
+    END IF;
+END//
+DELIMITER ;
