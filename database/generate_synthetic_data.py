@@ -602,16 +602,17 @@ def load_orders(cnx, cursor, customer_ids, address_ids):
 
 
 def load_purchases(cnx, cursor, supplier_ids, product_ids):
-    """Generate PURCHASE data"""
+    """Generate PURCHASE data (BCNF compliant - no total_cost column)"""
     print("\n" + "=" * 60)
     print("8. Generating PURCHASE data...")
     print("=" * 60)
 
+    # BCNF: total_cost removed, calculated via VIEW_PURCHASE_WITH_TOTAL
     query = """
         INSERT INTO PURCHASE 
         (supplier_id, product_id, transaction_date, quantity, unit_cost, 
-         total_cost, payment_status, payment_date, invoice_no)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+         payment_status, payment_date, invoice_no)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     payment_statuses = ["pending", "paid", "partial"]
@@ -637,7 +638,6 @@ def load_purchases(cnx, cursor, supplier_ids, product_ids):
         unit_cost = Decimal(str(sale_price * random.uniform(0.60, 0.80))).quantize(
             Decimal("0.01")
         )
-        total_cost = unit_cost * quantity
 
         payment_status = random.choice(payment_statuses)
         payment_date = None
@@ -657,7 +657,6 @@ def load_purchases(cnx, cursor, supplier_ids, product_ids):
                     transaction_date,
                     quantity,
                     unit_cost,
-                    total_cost,
                     payment_status,
                     payment_date.date() if payment_date else None,
                     invoice_no,
@@ -771,16 +770,17 @@ def load_returns(cnx, cursor, customer_ids, order_ids, product_ids):
 
 
 def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
-    """Generate SALE data"""
+    """Generate SALE data (BCNF compliant - no profit column)"""
     print("\n" + "=" * 60)
     print("10. Generating SALE data...")
     print("=" * 60)
 
+    # BCNF: profit removed, calculated via VIEW_SALE_WITH_PROFIT
     query = """
         INSERT INTO SALE 
         (customer_id, order_id, branch_id, transaction_date, transaction_amount, 
-         cost, profit, sale_type)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+         cost, sale_type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
 
     sale_types = ["online", "in-store"]
@@ -813,9 +813,8 @@ def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
         transaction_date = order_date
         transaction_amount = Decimal(str(total_amount)).quantize(Decimal("0.01"))
 
-        # Cost is 60-70% of transaction amount, profit is the difference
+        # Cost is 65% of transaction amount (profit = 35%, calculated via VIEW)
         cost = transaction_amount * Decimal("0.65")
-        profit = transaction_amount - cost
 
         try:
             cursor.execute(
@@ -827,7 +826,6 @@ def load_sales(cnx, cursor, customer_ids, order_ids, branch_ids):
                     transaction_date,
                     transaction_amount,
                     cost,
-                    profit,
                     sale_type,
                 ),
             )
