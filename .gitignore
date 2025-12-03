@@ -225,10 +225,7 @@ lerna-debug.log*
 # ============================================================================
 # Project Specific
 # ============================================================================
-# Reports
-reports/*.pdf
-reports/*.docx
-reports/*.doc
+
 
 # Test outputs
 test_outputs/
