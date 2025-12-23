@@ -97,39 +97,36 @@ const Orders = () => {
 
                 {/* Expanded Items List */}
                 {expandedOrderId === order.order_id && (
-                  <div className="order-items-container" style={{ marginTop: '20px', borderTop: '1px solid #333', paddingTop: '20px' }}>
-                    <h4 style={{ marginBottom: '15px', color: '#4ade80' }}>ORDER ITEMS</h4>
+                  <div className="order-items-container">
+                    <h4>ORDER ITEMS</h4>
                     {order.items && order.items.map((item, index) => (
-                      <div key={index} className="order-product-item" style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '4px' }}>
+                      <div key={index} className="order-product-item">
                         <div
                           className="product-thumbnail"
-                          style={{ width: '60px', height: '60px', marginRight: '15px', cursor: 'pointer', overflow: 'hidden', borderRadius: '4px' }}
                           onClick={() => navigate(`/products/${item.product_id}`)}
                         >
                           {item.image_url ? (
-                            <img src={item.image_url} alt={item.product_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={item.image_url} alt={item.product_name} />
                           ) : (
-                            <div style={{ width: '100%', height: '100%', background: '#333' }} />
+                            <div className="thumbnail-placeholder" />
                           )}
                         </div>
-                        <div className="product-info" style={{ flex: 1 }}>
+                        <div className="product-info">
                           <div
                             className="product-name"
-                            style={{ fontWeight: 'bold', cursor: 'pointer', marginBottom: '5px' }}
                             onClick={() => navigate(`/products/${item.product_id}`)}
                           >
                             {item.product_name}
                           </div>
-                          <div className="product-meta" style={{ fontSize: '0.9em', color: '#aaa' }}>
+                          <div className="product-meta">
                             Qty: {item.quantity} × ${item.unit_price.toFixed(2)}
                           </div>
                         </div>
-                        <div className="product-total" style={{ fontWeight: 'bold', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px' }}>
+                        <div className="product-total">
                           <span>${(item.quantity * item.unit_price).toFixed(2)}</span>
-
                           {/* Show Return Status if exists */}
                           {item.return_status && (
-                            <span className={`status-badge ${item.return_status}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                            <span className={`status-badge ${item.return_status} small`}>
                               {item.return_status.toUpperCase()}
                             </span>
                           )}
@@ -139,10 +136,9 @@ const Orders = () => {
 
                     {/* Full Order Return Button */}
                     {order.order_status === 'delivered' && (
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #333', paddingTop: '15px' }}>
+                      <div className="return-order-section">
                         <button
-                          className="pixel-button"
-                          style={{ background: '#ef4444', fontSize: '12px' }}
+                          className="pixel-button return-btn"
                           onClick={async () => {
                             const reason = prompt("Please enter the reason for returning the ENTIRE order:");
                             if (reason) {

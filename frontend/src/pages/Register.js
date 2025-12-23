@@ -11,8 +11,9 @@ const Register = () => {
     first_name: '',
     last_name: '',
     email: '',
-    password: '',
     phone: '',
+    password: '',
+    confirm_password: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,20 +28,21 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (formData.password !== formData.confirm_password) {
+      setError('Passwords do not match');
+      return;
+    }
+    
     setLoading(true);
     setError('');
 
     try {
-      await api.registerCustomer(formData);
-      // Auto login after registration
-      const user = await api.loginCustomer({
-        email: formData.email,
-        password: formData.password,
-      });
+      const user = await api.registerCustomer(formData);
       login(user);
       navigate('/');
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -48,94 +50,118 @@ const Register = () => {
 
   return (
     <div className="register-page">
-      <div className="container">
-        <div className="register-container">
-          <h1 className="register-title">🎮 REGISTER</h1>
-          
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
+      <div className="register-container">
+        <div className="register-header">
+          <div className="register-icon">
+            <img src="/logo.jpg" alt="Arcade Gallery Logo" />
+          </div>
+          <h1 className="register-title">Join the Gallery</h1>
+          <p className="register-subtitle">Create your account and start your adventure</p>
+        </div>
+        
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="register-form">
-            <div className="form-row">
-              <div className="form-group">
-                <label>FIRST NAME:</label>
-                <input
-                  type="text"
-                  name="first_name"
-                  className="pixel-input"
-                  value={formData.first_name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>LAST NAME:</label>
-                <input
-                  type="text"
-                  name="last_name"
-                  className="pixel-input"
-                  value={formData.last_name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
-
+        <form onSubmit={handleSubmit} className="register-form">
+          <div className="form-row">
             <div className="form-group">
-              <label>EMAIL:</label>
+              <label htmlFor="first_name">First Name</label>
               <input
-                type="email"
-                name="email"
-                className="pixel-input"
-                value={formData.email}
+                id="first_name"
+                type="text"
+                name="first_name"
+                placeholder="John"
+                value={formData.first_name}
                 onChange={handleChange}
                 required
               />
             </div>
-
+            
             <div className="form-group">
-              <label>PASSWORD:</label>
+              <label htmlFor="last_name">Last Name</label>
               <input
+                id="last_name"
+                type="text"
+                name="last_name"
+                placeholder="Doe"
+                value={formData.last_name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="email">Email Address</label>
+            <input
+              id="email"
+              type="email"
+              name="email"
+              placeholder="john@example.com"
+              value={formData.email}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="phone">Phone Number</label>
+            <input
+              id="phone"
+              type="tel"
+              name="phone"
+              placeholder="+1 (555) 123-4567"
+              value={formData.phone}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
                 type="password"
                 name="password"
-                className="pixel-input"
+                placeholder="Create a password"
                 value={formData.password}
                 onChange={handleChange}
                 required
-                minLength="6"
               />
             </div>
-
+            
             <div className="form-group">
-              <label>PHONE (OPTIONAL):</label>
+              <label htmlFor="confirm_password">Confirm Password</label>
               <input
-                type="tel"
-                name="phone"
-                className="pixel-input"
-                value={formData.phone}
+                id="confirm_password"
+                type="password"
+                name="confirm_password"
+                placeholder="Confirm password"
+                value={formData.confirm_password}
                 onChange={handleChange}
+                required
               />
             </div>
-
-            <button 
-              type="submit" 
-              className="pixel-button success"
-              disabled={loading}
-            >
-              {loading ? 'REGISTERING...' : 'REGISTER'}
-            </button>
-          </form>
-
-          <div className="register-footer">
-            <p>ALREADY HAVE AN ACCOUNT?</p>
-            <Link to="/login" className="pixel-button">
-              LOGIN
-            </Link>
           </div>
+
+          <button 
+            type="submit" 
+            className="pixel-button"
+            disabled={loading}
+          >
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+        </form>
+
+        <div className="register-footer">
+          <p>Already have an account?</p>
+          <Link to="/login" className="pixel-button secondary">
+            Sign In Instead
+          </Link>
         </div>
       </div>
     </div>
@@ -143,4 +169,3 @@ const Register = () => {
 };
 
 export default Register;
-
